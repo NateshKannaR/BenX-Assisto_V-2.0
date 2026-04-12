@@ -54,10 +54,16 @@ class Config:
     EMAIL_SMTP_PORT = int(os.getenv("BENX_SMTP_PORT", "587"))
 
     HOME = Path.home()
-    
-    # Full System Control (BLACKBOXAI matching)
-    BENX_DIR = HOME / ".benx"
-    BENX_DIR.mkdir(exist_ok=True)
+
+    # Use /tmp on serverless (Vercel), ~/.benx on desktop
+    _base = Path("/tmp/benx") if not (Path.home() / ".benx").parent.exists() or os.getenv("VERCEL") else Path.home() / ".benx"
+    BENX_DIR = _base
+    try:
+        BENX_DIR.mkdir(parents=True, exist_ok=True)
+    except OSError:
+        BENX_DIR = Path("/tmp/benx")
+        BENX_DIR.mkdir(parents=True, exist_ok=True)
+
     ACTIVITY_LOG_FILE = BENX_DIR / "activity_log.json"
     SUDO_ALLOWED_PATHS = ["/home", "/tmp", "/var/tmp"]  # Expandable
     SHELL_RATE_LIMIT = 5  # Commands per minute
@@ -100,8 +106,6 @@ class Config:
     IMAGE_CACHE_DIR = None  # Will be set in __init__
     
     # Paths
-    HOME = Path.home()
-    BENX_DIR = HOME / ".benx"
     LOG_FILE = BENX_DIR / "benx.log"
     HISTORY_FILE = BENX_DIR / "history.txt"
     CONVERSATION_FILE = BENX_DIR / "conversation.json"
@@ -113,15 +117,19 @@ class Config:
     SHARED_CHAT_FILE = BENX_DIR / "shared_chat.json"
     AUTOMATION_STATE_FILE = BENX_DIR / "automation_state.json"
     RAG_DATA_DIR = BENX_DIR / "rag_data"
-    
-    # Create directories
-    BENX_DIR.mkdir(exist_ok=True)
-    RAG_DATA_DIR.mkdir(exist_ok=True)
-    
-    # Initialize paths (using .pkl extension for vector DB)
+
+    # Create directories safely
+    try:
+        RAG_DATA_DIR.mkdir(parents=True, exist_ok=True)
+    except OSError:
+        pass
+
     VECTOR_DB_PATH = RAG_DATA_DIR / "vector_db.pkl"
     IMAGE_CACHE_DIR = RAG_DATA_DIR / "images"
-    IMAGE_CACHE_DIR.mkdir(exist_ok=True)
+    try:
+        IMAGE_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    except OSError:
+        pass
     
     # System tools with fallbacks
     TOOLS = {
