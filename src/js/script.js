@@ -1,15 +1,16 @@
 /* ═══════════════════════════════════════════════════════════
    BenX AI — Web UI Script v2.0
-   Real-time backend connection via WebSocket + SSE
+   Real-time backend connection via SSE (Vercel compatible)
    ═══════════════════════════════════════════════════════════ */
 
 "use strict";
 
 // ── Config ──────────────────────────────────────────────────
 const API_BASE    = window.location.origin;
-const WS_URL      = `${window.location.protocol === "https:" ? "wss:" : "ws:"}//${window.location.host}/ws`;
 const METRICS_INT = 3000;   // ms between metric polls
 const ACTIVITY_INT = 8000;  // ms between random activity items
+// WebSocket is not supported on Vercel serverless — SSE is used instead
+const WS_ENABLED  = false;
 
 // ── DOM refs ─────────────────────────────────────────────────
 const ui = {
@@ -44,8 +45,6 @@ const ui = {
 };
 
 // ── State ────────────────────────────────────────────────────
-let ws = null;
-let wsReady = false;
 let isStreaming = false;
 let mediaRecorder = null;
 let audioChunks = [];
@@ -185,45 +184,25 @@ async function fetchMetrics() {
   }
 }
 
-// ── WebSocket ────────────────────────────────────────────────
-function connectWS() {
-  setStatus("connecting");
-  try {
-    ws = new WebSocket(WS_URL);
-
-    ws.onopen = () => {
-      wsReady = true;
-      setStatus("connected");
-      addActivity("WebSocket connected to BenX backend.");
-    };
-
-    ws.onmessage = (e) => {
-      try {
-        const msg = JSON.parse(e.data);
-        handleServerMessage(msg);
-      } catch { /* ignore malformed */ }
-    };
-
-    ws.onclose = () => {
-      wsReady = false;
-      setStatus("disconnected");
-      addActivity("Connection dropped. Reconnecting…");
-      setTimeout(connectWS, 3500);
-    };
-
-    ws.onerror = () => {
-      setStatus("error");
-    };
-  } catch {
-    setStatus("error");
-    setTimeout(connectWS, 5000);
-  }
-}
-
+// ── Status (SSE-only, no WebSocket on Vercel) ────────────────
 function setStatus(state) {
-  const labels = { connecting:"Connecting…", connected:"Operational", disconnected:"Reconnecting…", error:"Error" };
+  const labels = { connected:"Operational", error:"Error" };
   ui.statusPill.className = "status-pill " + (state === "connected" ? "connected" : state === "error" ? "error" : "");
   ui.statusLabel.textContent = labels[state] || state;
+}
+
+async function checkBackend() {
+  try {
+    const res = await fetch(`${API_BASE}/api/health`, { signal: AbortSignal.timeout(4000) });
+    if (res.ok) {
+      setStatus("connected");
+      addActivity("BenX backend connected.");
+    } else {
+      setStatus("error");
+    }
+  } catch {
+    setStatus("error");
+  }
 }
 
 function handleServerMessage(msg) {
@@ -386,14 +365,8 @@ async function submitMessage(text) {
     return;
   }
 
-  // Use WebSocket if available, else fall back to SSE
-  if (wsReady && ws) {
-    removeTypingIndicator();
-    startAssistantStream();
-    ws.send(JSON.stringify({ type:"chat", message: text, model, agent_mode: agentMode }));
-  } else {
-    await submitViaSSE(text, model, agentMode);
-  }
+  // Always use SSE on Vercel (no WebSocket support)
+  await submitViaSSE(text, model, agentMode);
 }
 
 async function submitViaSSE(text, model, agentMode) {
@@ -691,8 +664,8 @@ updateClock();
 updateRoutines();
 addActivity("Dashboard initialised — connecting to BenX backend…");
 
-// Start WS
-connectWS();
+// Check backend health (replaces WebSocket connect)
+checkBackend();
 
 // Start metrics polling
 fetchMetrics();
@@ -704,5 +677,5 @@ setInterval(() => addActivity(activityLines[Math.floor(Math.random() * activityL
 setInterval(updateRoutines, 15000);
 setInterval(pollSharedMessages, 2000);
 
-// Load history after a short delay (let WS connect first)
+// Load history after short delay
 setTimeout(loadHistory, 1200);
