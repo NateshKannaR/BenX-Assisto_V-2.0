@@ -8,11 +8,18 @@ from typing import List
 class Config:
     """Configuration class for BenX"""
     
-    # API Configuration
-    # IMPORTANT: Never commit your API key to GitHub!
-    # Set your API key as an environment variable:
-    # export GROQ_API_KEY='your_key_here'
+    # MongoDB Atlas for cross-platform sync (GTK4/Web/Mobile)
+    MONGODB_URI = "mongodb+srv://Natesh:Natesh@cluster0.wwp3oig.mongodb.net/?retryWrites=true&w=majority"
+    DATABASE_NAME = "benx"
+    
+# API Configuration (Multi-provider)
+    # Set environment variables:
+    # export GROQ_API_KEY='...'
+    # export OPENAI_API_KEY='...'
+    # export OLLAMA_URL='http://localhost:11434'
     GROQ_KEY = os.getenv("GROQ_API_KEY", os.getenv("GROQ_KEY", "")).strip()
+    OPENAI_KEY = os.getenv("OPENAI_API_KEY", "").strip()
+    OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434")
     
     # ── Model routing: task-type → best model ──────────────────────
     MODELS = [
@@ -46,14 +53,23 @@ class Config:
     EMAIL_SMTP     = os.getenv("BENX_SMTP", "smtp.gmail.com").strip()
     EMAIL_SMTP_PORT = int(os.getenv("BENX_SMTP_PORT", "587"))
 
+    HOME = Path.home()
+    
+    # Full System Control (BLACKBOXAI matching)
+    BENX_DIR = HOME / ".benx"
+    BENX_DIR.mkdir(exist_ok=True)
+    ACTIVITY_LOG_FILE = BENX_DIR / "activity_log.json"
+    SUDO_ALLOWED_PATHS = ["/home", "/tmp", "/var/tmp"]  # Expandable
+    SHELL_RATE_LIMIT = 5  # Commands per minute
+    REQUIRE_SUDO_CONFIRM = True  # Prompt for sudo
+    
     # Safety/permissions
-    # If True, require explicit confirmation for privileged or destructive actions.
     REQUIRE_CONFIRMATION = True
-    # If True, prompt before running sudo-level commands.
     PROMPT_FOR_SUDO = True
-    # Limit file operations to these roots unless explicitly overridden.
     ALLOWED_ROOTS = [
         str(Path.home()),
+        "/tmp",
+        "/var/tmp"
     ]
     
     # RAG Configuration
@@ -61,6 +77,18 @@ class Config:
     RAG_EMBEDDINGS_MODEL = "text-embedding-3-small"  # For text embeddings
     VECTOR_DB_PATH = None  # Will be set in __init__
     MAX_CONTEXT_LENGTH = 128000  # Maximum context window
+    EMBEDDING_CACHE_SIZE = 512   # Max entries in LRU embedding cache
+
+    # AI Engine Features
+    MULTI_MODEL_VOTING_ENABLED = True   # Vote between top-2 models for reasoning tasks
+    ASYNC_ENABLED = True                # Use async paths in FastAPI server
+
+    # System Monitor
+    SYSTEM_MONITOR_ENABLED = True
+    MONITOR_CPU_THRESHOLD    = 90   # % CPU to alert at
+    MONITOR_BATTERY_THRESHOLD = 15  # % battery to warn at
+    MONITOR_RAM_THRESHOLD    = 88   # % RAM to alert at
+    MONITOR_TEMP_THRESHOLD   = 85   # °C to alert at
     
     # Image processing - vision models (may not be available)
     IMAGE_MODELS = [
@@ -82,6 +110,7 @@ class Config:
     LEARNING_FILE = BENX_DIR / "learning.json"
     DEVELOPER_MEMORY_FILE = BENX_DIR / "developer_memory.json"
     SCHEDULE_FILE = BENX_DIR / "scheduled_tasks.json"
+    SHARED_CHAT_FILE = BENX_DIR / "shared_chat.json"
     AUTOMATION_STATE_FILE = BENX_DIR / "automation_state.json"
     RAG_DATA_DIR = BENX_DIR / "rag_data"
     

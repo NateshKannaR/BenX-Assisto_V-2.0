@@ -1316,6 +1316,25 @@ class CommandEngine:
         return "❌ Typing failed - install wtype: sudo pacman -S wtype"
 
     @staticmethod
+    def type_in_app(app: str, text: str) -> str:
+        """Focus app by title/class, then type text"""
+        from jarvis_ai.workspace_monitor import WorkspaceMonitor
+        if not app or not text:
+            return "❌ App name and text required"
+        
+        # Focus the app first
+        focus_result = WorkspaceMonitor.focus_window_by_title(app)
+        if "❌" in focus_result:
+            return f"❌ Could not focus '{app}': {focus_result}"
+        
+        import time
+        time.sleep(0.3)  # Wait for focus/compositor
+        
+        # Now type
+        type_result = CommandEngine.type_in_active_window(text)
+        return f"{focus_result}\n{type_result}"
+
+    @staticmethod
     def browser_list_tabs(workspace: Optional[int] = None) -> str:
         from jarvis_ai.browser_automation import BrowserAutomation
         return BrowserAutomation.list_tabs(workspace)

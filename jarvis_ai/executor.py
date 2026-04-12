@@ -265,6 +265,15 @@ class CommandExecutor:
                 "install_python_package": lambda: CommandEngine.install_python_package(obj.get("package", "")),
                 "update_system": lambda: CommandEngine.update_system(),
                 "check_updates": lambda: CommandEngine.check_updates(),
+                # Full Shell Control (Step 1)
+                "shell_execute": lambda: CommandEngine.shell_execute(obj.get("cmd", ""), sudo=obj.get("sudo", False)),
+                "sudo_execute": lambda: CommandEngine.shell_execute(obj.get("cmd", ""), sudo=True),
+                # BLACKBOXAI Tools
+                "read_file": lambda: CommandEngine.read_file(obj.get("path", "")),
+                "list_files": lambda: CommandEngine.list_files(obj.get("path", ".")),
+                "search_files": lambda: CommandEngine.search_files(obj.get("path", "."), obj.get("query", "")),
+                "create_file": lambda: CommandEngine.create_file(obj.get("path", ""), obj.get("content", "")),
+                "edit_file": lambda: CommandEngine.edit_file(obj.get("path", ""), obj.get("old_str", ""), obj.get("new_str", "")),
 
                 # Workspace / Window Management
                 "list_workspaces": lambda: CommandEngine.list_workspaces(),
@@ -308,10 +317,15 @@ class CommandExecutor:
                 "hangup_call": lambda: CommandExecutor._hangup_call(),
 
                 # Browser Automation
-                "browser_open": lambda: CommandEngine.browser_open(obj.get("url", "")),
+                "browser_open": lambda: CommandEngine.browser_open(obj.get("url", ""), obj.get("workspace")),
+                "browser_list_tabs": lambda: CommandEngine.browser_list_tabs(obj.get("workspace")),
+                "browser_switch_tab": lambda: CommandEngine.browser_switch_tab(obj.get("query", obj.get("tab", "")), obj.get("workspace")),
                 "browser_scrape": lambda: CommandEngine.browser_scrape(obj.get("url", ""), obj.get("query", "body")),
                 "browser_screenshot": lambda: CommandEngine.browser_screenshot(obj.get("url", "")),
                 "browser_search": lambda: CommandEngine.browser_search(obj.get("query", "")),
+                "type_in_ws_terminal": lambda: CommandEngine.type_in_ws_terminal(obj.get("workspace", 1), obj.get("text", "")),
+                "type_in_active_window": lambda: CommandEngine.type_in_active_window(obj.get("text", "")),
+                "type_in_app": lambda: CommandEngine.type_in_app(obj.get("app", ""), obj.get("text", "")),
             }
             
             if action in command_map:

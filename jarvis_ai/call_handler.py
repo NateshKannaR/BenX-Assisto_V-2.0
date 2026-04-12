@@ -57,6 +57,7 @@ def _ensure_ofono() -> bool:
     # Try connecting to running ofono
     try:
         dbus.SystemBus().get_object(OFONO_SERVICE, "/")
+        _power_on_modems()
         return True
     except Exception:
         pass
@@ -67,10 +68,29 @@ def _ensure_ofono() -> bool:
                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         time.sleep(2)
         dbus.SystemBus().get_object(OFONO_SERVICE, "/")
+        _power_on_modems()
         return True
     except Exception as e:
         logger.warning("Could not start ofono: %s", e)
         return False
+
+
+def _power_on_modems():
+    """Power on all available ofono modems automatically."""
+    try:
+        import dbus
+        bus = dbus.SystemBus()
+        mgr = dbus.Interface(bus.get_object(OFONO_SERVICE, "/"), OFONO_MANAGER)
+        for path, _ in mgr.GetModems():
+            modem = dbus.Interface(bus.get_object(OFONO_SERVICE, path), "org.ofono.Modem")
+            props = modem.GetProperties()
+            if not props.get("Powered", False):
+                modem.SetProperty("Powered", dbus.Boolean(True))
+                time.sleep(0.5)
+            if not props.get("Online", False):
+                modem.SetProperty("Online", dbus.Boolean(True))
+    except Exception as e:
+        logger.debug("Auto power-on modems: %s", e)
 
 
 def _get_modems():

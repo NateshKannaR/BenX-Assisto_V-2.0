@@ -49,8 +49,8 @@ class VoiceHandler:
         if VOICE_AVAILABLE:
             try:
                 self.recognizer = sr.Recognizer()
-                self.recognizer.energy_threshold = 300   # lower for system audio
-                self.recognizer.dynamic_energy_threshold = True
+                self.recognizer.energy_threshold = 1000
+                self.recognizer.dynamic_energy_threshold = False
             except Exception as e:
                 logger.warning(f"Voice recognition setup failed: {e}")
 
@@ -69,8 +69,8 @@ class VoiceHandler:
         if self.recognizer:
             try:
                 with sr.Microphone() as source:
-                    self.recognizer.adjust_for_ambient_noise(source, duration=0.5)
-                    audio = self.recognizer.listen(source, timeout=5, phrase_time_limit=15)
+                    self.recognizer.adjust_for_ambient_noise(source, duration=1.5)
+                    audio = self.recognizer.listen(source, timeout=8, phrase_time_limit=15)
                 return self.recognizer.recognize_google(audio)
             except sr.UnknownValueError:
                 return None

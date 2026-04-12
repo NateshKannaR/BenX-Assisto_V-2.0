@@ -1,0 +1,73 @@
+/* Additional CSS for new controls - Web parity */
+
+/* Control labels */
+.control-label {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 10pt;
+    color: #8fb5ad;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    min-width: 48px;
+    margin-right: 4px;
+}
+
+/* Model combo & switch */
+combobox, switch {
+    min-height: 28px;
+    min-width: 120px;
+}
+
+/* Switch track/thumb */
+switch trough {
+    background: rgba(255,255,255,0.12);
+    border-radius: 14px;
+    min-height: 20px;
+    min-width: 40px;
+    border: 1px solid rgba(255,255,255,0.15);
+}
+
+switch slider {
+    background: rgba(96,255,185,0.9);
+    border-radius: 999px;
+    min-height: 16px;
+    min-width: 16px;
+    border: 1px solid rgba(96,255,185,0.3);
+    margin: 2px;
+    transition: margin 0.2s ease;
+}
+
+switch:checked slider {
+    background: rgba(97,216,255,0.9);
+    border-color: rgba(97,216,255,0.3);
+    margin-left: 20px;
+}
+
+/* Suggestion chips */
+.suggestion-chip {
+    background: rgba(7,19,31,0.8);
+    border: 1px solid rgba(96,255,185,0.25);
+    border-radius: 16px;
+    padding: 8px 14px;
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 9pt;
+    color: #ebfff7;
+    min-height: 32px;
+    min-width: 90px;
+}
+
+.suggestion-chip:hover {
+    background: rgba(10,30,20,0.95);
+    border-color: #60ffb9;
+    box-shadow: 0 4px 12px rgba(96,255,185,0.25);
+    transform: translateY(-1px);
+}
+
+.chips-container {
+    margin-bottom: 12px;
+}
+
+/* Chips flowbox */
+flowboxchild {
+    padding: 2px;
+    margin: 2px;
+}

@@ -14,6 +14,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from jarvis_ai.gui.meet_overlay import MeetAnswerOverlay, is_question
 from jarvis_ai.call_handler import BluetoothCallHandler, dial, hangup_all, lookup_contact
+from .toast_manager import ToastManager
 
 logger = logging.getLogger(__name__)
 
@@ -32,6 +33,7 @@ class BeautifulBenXGTK4(Adw.ApplicationWindow):
         self.ai_engine = AIEngine()
         self.voice_handler = VoiceHandler()
         self.config = Config
+        self.toast_manager = ToastManager(self)
         self.processing = False
         self.window_mode = 'full'
         self.rotation = 0
@@ -41,6 +43,8 @@ class BeautifulBenXGTK4(Adw.ApplicationWindow):
         self.pending_image_path = None  # Image to attach to next message
         self._meet_overlay: MeetAnswerOverlay = None
         self._call_handler: BluetoothCallHandler = None
+        self._last_sync_id = 0.0  # track last synced web message
+        self.conversation_history = []
         self.setup_gui()
         
         # Setup keyboard shortcuts
@@ -71,6 +75,9 @@ class BeautifulBenXGTK4(Adw.ApplicationWindow):
     def setup_gui(self):
         self.set_title("BenX AI Assistant")
         self.set_default_size(1400, 800)
+        
+        # Load conversation history
+        self.load_conversation_history()
         
         # Main container
         main_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
@@ -146,6 +153,7 @@ class BeautifulBenXGTK4(Adw.ApplicationWindow):
         GLib.timeout_add(50, self.animate_logo)
         GLib.timeout_add_seconds(1, self.update_time)
         GLib.timeout_add_seconds(2, self.update_stats)
+        GLib.timeout_add_seconds(2, self._poll_web_messages)
         
         self.add_chat_message("BenX", "Hello! I'm BenX, your AI assistant. How can I help you?")
         self.log_activity("✅ BenX started")
@@ -192,7 +200,8 @@ class BeautifulBenXGTK4(Adw.ApplicationWindow):
         stats_box.add_css_class("stats-stack")
         box.append(stats_box)
         
-        self.cpu_label, self.cpu_bar = self.create_stat_card(stats_box, "CPU Load", "Monitors active processor usage", "accent-green")
+        self.net_label, self.net_bar = self.create_stat_card(stats_box, "Network", "KB/s transfer rate", "accent-purple")
+        self.cpu_label, self.cpu_bar = self.create_stat_card(stats_box, "CPU Load", "Monitors active processor usage + temp", "accent-green")
         self.mem_label, self.mem_bar = self.create_stat_card(stats_box, "Memory", "Tracks used system memory", "accent-blue")
         self.disk_label, self.disk_bar = self.create_stat_card(stats_box, "Disk", "Shows root filesystem utilization", "accent-amber")
         self.battery_label, self.battery_bar = self.create_stat_card(stats_box, "Battery", "Current battery charge and state", "accent-green")
@@ -258,10 +267,38 @@ class BeautifulBenXGTK4(Adw.ApplicationWindow):
         frame.set_child(box)
         
         # Chat header
+        # Chat header
         header_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
         header_box.add_css_class("panel-header-box")
         
         box.append(header_box)
+
+        # AI Controls row (Model + Agent toggle)
+        ai_controls = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
+        ai_controls.set_margin_top(8)
+        ai_controls.set_margin_bottom(8)
+
+        # Model selector
+        model_label = Gtk.Label(label="Model:", halign=Gtk.Align.START)
+        model_label.add_css_class("control-label")
+        ai_controls.append(model_label)
+
+        self.model_combo = Gtk.ComboBoxText()
+        for model in self.config.MODELS:
+            self.model_combo.append_text(model)
+        self.model_combo.set_active(0)  # Default to first model
+        ai_controls.append(self.model_combo)
+
+        # Agent mode toggle
+        agent_label = Gtk.Label(label="Agent:", halign=Gtk.Align.START)
+        agent_label.add_css_class("control-label")
+        ai_controls.append(agent_label)
+
+        self.agent_switch = Gtk.Switch()
+        self.agent_switch.set_active(False)
+        ai_controls.append(self.agent_switch)
+
+        box.append(ai_controls)
 
         # Chat area
         scroll = Gtk.ScrolledWindow()
@@ -285,6 +322,64 @@ class BeautifulBenXGTK4(Adw.ApplicationWindow):
         self.helper_label = Gtk.Label(label="", xalign=0)
         self.helper_label.add_css_class("helper-label")
         box.append(self.helper_label)
+
+        # Model selector & agent toggle (Web parity)
+        controls_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
+        controls_row.set_margin_bottom(12)
+
+        model_label = Gtk.Label(label="Model:")
+        model_label.add_css_class("control-label")
+        controls_row.append(model_label)
+
+        self.model_combo = Gtk.ComboBoxText()
+        model_list = ["Auto (Best)"] + self.config.MODELS[:]
+        for m in model_list:
+            self.model_combo.append_text(m)
+        self.model_combo.set_active(0)
+        controls_row.append(self.model_combo)
+
+        agent_label = Gtk.Label(label="Agent:")
+        agent_label.add_css_class("control-label")
+        controls_row.append(agent_label)
+
+        self.agent_switch = Gtk.Switch()
+        controls_row.append(self.agent_switch)
+
+        box.append(controls_row)
+
+        # Suggestion chips (Web parity)
+        chips_label = Gtk.Label(label="Quick Actions:")
+        chips_label.add_css_class("panel-kicker")
+        box.append(chips_label)
+
+        self.chips_flowbox = Gtk.FlowBox()
+        self.chips_flowbox.set_max_children_per_line(4)
+        self.chips_flowbox.set_selection_mode(Gtk.SelectionMode.NONE)
+        self.chips_flowbox.set_homogeneous(True)
+
+        suggestions = [
+            "Scan project", "Check resources", "Automate task", "Analyze screen"
+        ]
+        for text in suggestions:
+            chip_btn = Gtk.Button(label=text)
+            chip_btn.connect("clicked", lambda b, t=text: self.on_chip_clicked(t))
+            chip_btn.add_css_class("suggestion-chip")
+            self.chips_flowbox.append(chip_btn)
+
+        box.append(self.chips_flowbox)
+
+        # Input row: [+] [entry] [➤]
+        self.chips_flowbox.set_homogeneous(True)
+        self.chips_flowbox.add_css_class("chips-container")
+
+        suggestions = ["Scan project", "Check resources", "Automate task", "Analyze screen"]
+        for text in suggestions:
+            chip_btn = Gtk.Button(label=text)
+            chip_btn.connect("clicked", lambda b, t=text: self.on_chip_clicked(t))
+            chip_btn.add_css_class("suggestion-chip")
+            self.chips_flowbox.append(chip_btn)
+
+        box.append(self.chips_flowbox)
 
         # Input row: [+] [entry] [➤]
         input_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
@@ -377,12 +472,53 @@ class BeautifulBenXGTK4(Adw.ApplicationWindow):
 
     def _build_css(self) -> bytes:
         """Return the full CSS stylesheet as bytes."""
+        css_file = Path(__file__).with_suffix('.css')
+        if css_file.exists():
+            return css_file.read_bytes()
         return b"""
             /* Main window */
             window {
                 background: radial-gradient(circle at top left, rgba(12, 38, 27, 0.12) 0%, transparent 20%),
                             linear-gradient(180deg, #020405 0%, #000000 100%);
                 color: #ebfff7;
+            }
+
+            /* AI Controls */
+            .control-label {
+                font-size: 10pt;
+                font-weight: bold;
+                color: #8eb5ac;
+                font-family: 'Share Tech Mono', monospace;
+                margin-right: 4px;
+            }
+            
+            /* Metric accent-purple for net */
+            .accent-purple .metric-bar progress {
+                background: linear-gradient(90deg, rgba(180, 100, 255, 0.45) 0%, #cc88ff 100%);
+            }
+
+            /* Suggestion chips */
+            .suggestion-chip {
+                background: rgba(5, 7, 13, 0.9);
+                color: #60ffb9;
+                border: 2px solid rgba(82, 255, 173, 0.3);
+                border-radius: 14px;
+                font-size: 9pt;
+                font-weight: bold;
+                min-width: 68px;
+                min-height: 32px;
+                padding: 0 12px;
+                transition: all 0.2s ease;
+            }
+            .suggestion-chip:hover {
+                background: rgba(10, 30, 20, 0.95);
+                border-color: #60ffb9;
+                box-shadow: 0 0 12px rgba(96, 255, 185, 0.3);
+                transform: translateY(-1px);
+            }
+            .chips-container {
+                margin: 8px 0;
+                background: transparent;
             }
             
             /* Title */
@@ -1188,12 +1324,24 @@ class BeautifulBenXGTK4(Adw.ApplicationWindow):
         return True
     
     def update_stats(self):
-        """Update system stats"""
+        """Update system stats - now with net KB/s + CPU temp."""
         try:
             import psutil
             cpu = psutil.cpu_percent(interval=0.1)
             mem = psutil.virtual_memory().percent
             disk = psutil.disk_usage('/').percent
+            
+            # Net KB/s (delta counters)
+            net = psutil.net_io_counters()
+            if not hasattr(self, '_last_net'):
+                self._last_net = {'bytes_sent': 0, 'bytes_recv': 0}
+            net_sent = (net.bytes_sent - getattr(self, '_last_net', {}).get('bytes_sent', 0)) / 1024
+            net_recv = (net.bytes_recv - getattr(self, '_last_net', {}).get('bytes_recv', 0)) / 1024
+            self._last_net = {'bytes_sent': net.bytes_sent, 'bytes_recv': net.bytes_recv}
+            net_speed = (net_sent + net_recv) / 2  # Average
+            
+            self.net_label.set_text(f"{net_speed:.0f} KB/s")
+            self.net_bar.set_fraction(min(net_speed / 1000.0, 1.0))  # Cap at 1GB/s
             
             self.cpu_label.set_text(f"{cpu:.0f}%")
             self.mem_label.set_text(f"{mem:.0f}%")
@@ -1202,12 +1350,21 @@ class BeautifulBenXGTK4(Adw.ApplicationWindow):
             self.mem_bar.set_fraction(max(0.0, min(mem / 100.0, 1.0)))
             self.disk_bar.set_fraction(max(0.0, min(disk / 100.0, 1.0)))
             
+            # CPU Temp
+            try:
+                temps = psutil.sensors_temperatures()
+                cpu_temp = temps.get('coretemp', [None])[0].current if temps.get('coretemp') else None
+                if cpu_temp:
+                    self.cpu_label.set_text(f"{cpu:.0f}% / {cpu_temp:.0f}°C")
+            except:
+                pass
+            
             # Battery
             try:
                 battery = psutil.sensors_battery()
                 if battery:
-                    status = "Charging" if battery.power_plugged else "Discharging"
-                    self.battery_label.set_text(f"{battery.percent:.0f}% ({status})")
+                    status = "Chg" if battery.power_plugged else "Bat"
+                    self.battery_label.set_text(f"{battery.percent:.0f}% {status}")
                     self.battery_bar.set_fraction(max(0.0, min(battery.percent / 100.0, 1.0)))
                     
                     # Log warnings
@@ -1224,15 +1381,15 @@ class BeautifulBenXGTK4(Adw.ApplicationWindow):
                     self.battery_label.set_text("N/A")
                     self.battery_bar.set_fraction(0.0)
             
-            # CPU/Memory warnings
+            # Warnings
             if cpu > 90 and not hasattr(self, '_cpu_warned'):
-                self.log_activity("⚠️ High CPU usage")
+                self.log_activity("⚠️ High CPU")
                 self._cpu_warned = True
             elif cpu < 80:
                 self._cpu_warned = False
                 
             if mem > 90 and not hasattr(self, '_mem_warned'):
-                self.log_activity("⚠️ Low memory")
+                self.log_activity("⚠️ High memory")
                 self._mem_warned = True
             elif mem < 80:
                 self._mem_warned = False
@@ -1242,8 +1399,44 @@ class BeautifulBenXGTK4(Adw.ApplicationWindow):
         
         return True
     
+    def render_markdown(self, text: str) -> str:
+        """Simple markdown renderer like web version: bold, code, headers, lists, copy blocks."""
+        import re
+        
+        def esc_html(s): 
+            return s.replace('&', '&amp;').replace('<', '<').replace('>', '>')
+        
+        # Code blocks with copy
+        def code_block(match):
+            lang = match.group(1) or ''
+            code = esc_html(match.group(2).strip())
+            copy_id = f"code-{int(1000*hash(code)) % 100000}"
+            return f'<span id="{copy_id}" style="background:#1a1a1a;padding:8px;border-left:3px solid #60ffb9;display:block"><button onclick="copyCode(\\'{copy_id}\\' )" style="float:right;background:#60ffb9;color:black;padding:4px 8px;border:none;border-radius:4px;cursor:pointer;font-size:9pt">Copy</button><code class="lang-{lang}" style="font-family:monospace">{code}</code></span>'
+        
+        text = re.sub(r'```(\w*)\n?([\s\S]*?)```', code_block, text, flags=re.MULTILINE)
+        
+        # Inline code
+        text = re.sub(r'`([^`]+)`', r'<code style="background:#2a2a2a;padding:2px 4px;border-radius:3px">\1</code>', text)
+        
+        # Bold
+        text = re.sub(r'\*\*(.+?)\*\*', r'<b>\1</b>', text)
+        
+        # Headers
+        text = re.sub(r'^### (.+)$', r'<h4 style="color:#60ffb9;margin:12px 0 6px">\1</h4>', text, flags=re.MULTILINE)
+        text = re.sub(r'^## (.+)$', r'<h3 style="color:#a17cff;margin:16px 0 8px">\1</h3>', text, flags=re.MULTILINE)
+        text = re.sub(r'^# (.+)$', r'<h2 style="color:#61d8ff;margin:20px 0 10px;font-weight:bold">\1</h2>', text, flags=re.MULTILINE)
+        
+        # Lists
+        text = re.sub(r'^- (.+)$', r'• <span style="padding-left:20px">\1</span>', text, flags=re.MULTILINE)
+        text = re.sub(r'^\* (.+)$', r'• <span style="padding-left:20px">\1</span>', text, flags=re.MULTILINE)
+        
+        # Newlines → <br>
+        text = text.replace('\n', '<br>')
+        
+        return text
+    
     def add_chat_message(self, sender, message):
-        """Add message to chat"""
+        """Add message to chat - now with markdown rendering."""
         timestamp = datetime.now(tz=timezone.utc).astimezone().strftime("%H:%M:%S")
         
         msg_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
@@ -1264,26 +1457,36 @@ class BeautifulBenXGTK4(Adw.ApplicationWindow):
         sender_label.set_hexpand(True)
         sender_box.append(sender_label)
         
-        # Add copy button for BenX messages
+        # Add copy button for BenX messages (copies raw message)
         if sender == 'BenX':
-            copy_btn = self.create_copy_button("copy-btn", message, "Copy to clipboard")
+            copy_btn = self.create_copy_button("copy-btn", message, "Copy raw text")
             sender_box.append(copy_btn)
         
         msg_box.append(sender_box)
         
-        # Message
-        msg_label = Gtk.Label(label=f"  {message}", xalign=0, wrap=True)
+        # Message with markdown rendering
+        rendered = self.render_markdown(message)
+        msg_label = Gtk.Label()
+        msg_label.set_markup(f"  {rendered}")
         msg_label.add_css_class("chat-text")
         msg_label.set_max_width_chars(50)
-        msg_label.set_selectable(True)  # Make text selectable
+        msg_label.set_wrap(True)
+        msg_label.set_selectable(True)
         msg_box.append(msg_label)
         
         self.chat_box.append(msg_box)
         
-        # Store message in history for syncing
+        # Store RAW message in history for syncing (not rendered)
         self.message_history.append({'sender': sender, 'message': message, 'timestamp': timestamp})
         if sender == 'BenX':
             self.last_benx_message = message
+        
+        # Write RAW to shared chat store
+        try:
+            from jarvis_ai.shared_chat import append as shared_append
+            shared_append(sender, message, source="gtk4")
+        except Exception:
+            pass
         
         # Auto-scroll
         GLib.idle_add(self._scroll_chat_to_bottom)
@@ -1311,6 +1514,66 @@ class BeautifulBenXGTK4(Adw.ApplicationWindow):
         if adj:
             adj.set_value(adj.get_upper())
     
+    def _poll_web_messages(self):
+        """Pull messages sent from the Web UI and process user messages through AI."""
+        try:
+            from jarvis_ai.shared_chat import get_since
+            new_msgs = get_since(self._last_sync_id)
+            for msg in new_msgs:
+                self._last_sync_id = max(self._last_sync_id, msg["id"])
+                if msg.get("source") == "web":
+                    sender = msg["sender"]
+                    text = msg["text"]
+                    GLib.idle_add(self._inject_synced_message, sender, text, msg["timestamp"])
+                    # Only process user messages through AI — BenX replies come from web already
+                    if sender != "BenX" and not self.processing:
+                        threading.Thread(
+                            target=self._process_web_command,
+                            args=(text,),
+                            daemon=True
+                        ).start()
+        except Exception:
+            pass
+        return True
+
+    def _inject_synced_message(self, sender: str, text: str, timestamp: str):
+        """Add a web-originated message to the GTK4 chat without re-writing to shared store."""
+        msg_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
+        msg_box.set_margin_start(10)
+        msg_box.set_margin_end(10)
+        msg_box.set_margin_top(5)
+        msg_box.set_margin_bottom(5)
+        msg_box.add_css_class("chat-message")
+        msg_box.add_css_class("chat-message-assistant" if sender == "BenX" else "chat-message-user")
+
+        color = '#00ff41' if sender == 'BenX' else '#00cfff'
+        sender_label = Gtk.Label(xalign=0)
+        sender_label.set_markup(f"<span foreground='{color}'><b>[{timestamp}] {sender} 🌐:</b></span>")
+        msg_box.append(sender_label)
+
+        msg_label = Gtk.Label(label=f"  {text}", xalign=0, wrap=True)
+        msg_label.add_css_class("chat-text")
+        msg_label.set_max_width_chars(50)
+        msg_label.set_selectable(True)
+        msg_box.append(msg_label)
+
+        self.chat_box.append(msg_box)
+        self.message_history.append({'sender': sender, 'message': text, 'timestamp': timestamp})
+        GLib.idle_add(self._scroll_chat_to_bottom)
+
+    def _process_web_command(self, text: str):
+        """Process a user message from Web UI through AI and write reply to shared store."""
+        try:
+            from jarvis_ai.shared_chat import append as shared_append
+            response = self._run_agent_or_fallback(text)
+            # Show in GTK4 chat
+            GLib.idle_add(self._inject_synced_message, "BenX", response,
+                          __import__('datetime').datetime.now().strftime("%H:%M:%S"))
+            # Write BenX reply back to shared store so web UI sees it
+            shared_append("BenX", response, source="gtk4")
+        except Exception as e:
+            pass
+
     def log_activity(self, activity):
         """Add activity to log"""
         timestamp = datetime.now(tz=timezone.utc).astimezone().strftime("%H:%M:%S")
@@ -1373,18 +1636,26 @@ class BeautifulBenXGTK4(Adw.ApplicationWindow):
 
     def on_send_clicked(self, widget):
         """Handle send button click"""
+        model = self.model_combo.get_active_text()
+        if model == "Auto (Best)":
+            model = None
+        agent_mode = self.agent_switch.get_active()
+        
         text = self.input_entry.get_text().strip()
         if not text and not self.pending_image_path:
             return
         if not text:
             text = "What is in this image?"
         if self.processing:
+            self.toast_manager.info("BenX is already processing a request")
             self.log_activity("ℹ️ BenX is already processing a request")
             return
         
         image_path = self.pending_image_path
         self.input_entry.set_text("")
         self._clear_image()
+        
+        self.toast_manager.info("Processing...")
 
         display_text = f"{text} [📎 image attached]" if image_path else text
         self.add_chat_message("You", display_text)
@@ -1423,6 +1694,9 @@ class BeautifulBenXGTK4(Adw.ApplicationWindow):
     
     def _run_agent_or_fallback(self, text: str) -> str:
         """Run agentic loop or fall back to single command. Returns response string."""
+        model = self.model_combo.get_active_id() if hasattr(self, 'model_combo') else None
+        agent_mode = self.agent_switch.get_active() if hasattr(self, 'agent_switch') else False
+
         from jarvis_ai.executor import CommandExecutor
 
         def on_step(msg):
@@ -1430,36 +1704,50 @@ class BeautifulBenXGTK4(Adw.ApplicationWindow):
             if msg.startswith(("💭", "🔧", "⚙️", "👁️")):
                 GLib.idle_add(self._add_agent_step_message, msg)
 
-        agent_result = self.ai_engine.agent_run(
-            text,
-            confirm_cb=self.show_confirmation_dialog,
-            on_step_cb=on_step
-        )
-        if agent_result is not None:
-            return agent_result
+        if agent_mode:
+            agent_result = self.ai_engine.agent_run(
+                text,
+                model=model,
+                confirm_cb=self.show_confirmation_dialog,
+                on_step_cb=on_step
+            )
+            if agent_result is not None:
+                return agent_result
+        else:
+            # Single command fallback
+            json_cmd = self.ai_engine.interpret_command(
+                text,
+                conversation_context=self.ai_engine.conversation_history,
+                learning_engine=self.ai_engine.learning_engine,
+                model=model
+            )
+            result = CommandExecutor.execute(
+                json_cmd, self.ai_engine, text,
+                confirm_cb=self.show_confirmation_dialog
+            )
+            if result is not None:
+                return result
 
-        json_cmd = self.ai_engine.interpret_command(
-            text,
-            conversation_context=self.ai_engine.conversation_history,
-            learning_engine=self.ai_engine.learning_engine
-        )
-        result = CommandExecutor.execute(
-            json_cmd, self.ai_engine, text,
-            confirm_cb=self.show_confirmation_dialog
-        )
-        return self.ai_engine.chat(text) if result is None else result
+        # Conversational chat
+        return self.ai_engine.chat(text, model=model)
 
-    def process_command(self, text, image_path=None):
+    def process_command(self, text, image_path=None, model=None, agent_mode=False):
         """Process command - tries agentic loop first, falls back to single command"""
         try:
             if image_path:
                 response = self.ai_engine.chat(text, image_path=image_path)
             else:
-                response = self._run_agent_or_fallback(text)
-            GLib.idle_add(self.add_chat_message, "BenX", response)
+                if agent_mode:
+                    response = self.ai_engine.agent_run(text)
+                else:
+                    response = self._run_agent_or_fallback(text, model=model)
+            GLib.idle_add(self.add_chat_message, "BenX", self.render_markdown(response))
             GLib.idle_add(self.set_processing_state, False, "Ready.")
+            GLib.idle_add(self.toast_manager.success, "Done!")
         except Exception as e:
-            GLib.idle_add(self.add_chat_message, "BenX", f"Error: {str(e)}")
+            error_msg = f"❌ Error: {str(e)}"
+            GLib.idle_add(self.add_chat_message, "BenX", error_msg)
+            GLib.idle_add(self.toast_manager.error, error_msg)
             GLib.idle_add(self.set_processing_state, False, "Request failed.")
 
     def _add_agent_step_message(self, msg: str):

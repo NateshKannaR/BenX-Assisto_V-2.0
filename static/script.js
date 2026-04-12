@@ -142,7 +142,7 @@ function addActivity(message) {
   }
 }
 
-function addChatMessage(role, text) {
+function addChatMessage(role, text, _unused) {
   const { stamp } = nowParts();
   const item = document.createElement("article");
   item.className = `chat-message ${role}`;
@@ -182,14 +182,47 @@ function submitMessage(message) {
 
   addChatMessage("user", trimmed);
   addActivity(`Queued request: ${trimmed}`);
+  postSharedMessage("You", trimmed);
   ui.chatInput.value = "";
 
   window.setTimeout(() => {
-    addChatMessage("assistant", replyFor(trimmed));
+    const reply = replyFor(trimmed);
+    addChatMessage("assistant", reply);
+    postSharedMessage("BenX", reply);
   }, 420);
 }
 
-ui.sendBtn.addEventListener("click", () => submitMessage(ui.chatInput.value));
+// ── Shared chat sync ─────────────────────────────────────────────────────────
+let _lastSyncId = 0;
+
+async function postSharedMessage(sender, text) {
+  try {
+    await fetch("/api/messages", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ sender, text }),
+    });
+  } catch (_) {}
+}
+
+async function pollSharedMessages() {
+  try {
+    const res = await fetch(`/api/messages?since=${_lastSyncId}`);
+    const data = await res.json();
+    for (const msg of data.messages || []) {
+      _lastSyncId = Math.max(_lastSyncId, msg.id);
+      if (msg.source === "gtk4") {
+        const role = msg.sender === "BenX" ? "assistant" : "user";
+        addChatMessage(role, `${msg.text} <span style="font-size:0.8em;opacity:0.6">[GTK4]</span>`, false);
+        addActivity(`GTK4 → ${msg.sender}: ${msg.text.slice(0, 50)}`);
+      }
+    }
+  } catch (_) {}
+}
+
+window.setInterval(pollSharedMessages, 2000);
+
+
 
 ui.chatInput.addEventListener("keydown", (event) => {
   if (event.key === "Enter" && !event.shiftKey) {

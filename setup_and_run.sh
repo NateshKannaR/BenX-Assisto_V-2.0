@@ -35,10 +35,22 @@ else
     fi
 fi
 
+echo "🔧 Installing Python dependencies..."
+cd /home/natesh/Downloads/Ben
+python -m venv venv
+source venv/bin/activate
+pip install --upgrade pip
+pip install -r requirements.txt
 echo ""
+echo "✅ Dependencies installed!"
 echo "=========================================="
 echo "Running BenX AI..."
 echo "=========================================="
 echo ""
+
+# System deps reminder
+echo "💡 Install system deps if needed:"
+echo "Arch: sudo pacman -S gtk4 libadwaita python-gobject tesseract grim"
+echo "Ubuntu: sudo apt install libgtk-4-1 libadwaita-1-0 python3-gi tesseract-ocr grim"
 
 python3 benx.py "$@"

@@ -267,6 +267,13 @@ class AgentOrchestrator:
             elif tool_name == "browser_search":
                 from jarvis_ai.browser_automation import BrowserAutomation
                 return BrowserAutomation.search_and_scrape(params.get("query", ""))
+            elif tool_name in ["browser_list_tabs", "browser_switch_tab"]:
+                from jarvis_ai.command_engine import CommandEngine
+                ws = params.get("workspace")
+                if tool_name == "browser_list_tabs":
+                    return CommandEngine.browser_list_tabs(ws)
+                else:
+                    return CommandEngine.browser_switch_tab(params.get("query", params.get("tab", "")), ws)
             elif tool_name == "email_inbox":
                 from jarvis_ai.email_manager import EmailManager
                 return EmailManager.read_inbox(int(params.get("count", 5)))

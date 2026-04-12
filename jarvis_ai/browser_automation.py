@@ -22,6 +22,8 @@ def _run(coro):
         return f"❌ Browser error: {e}"
 
 
+from .browser_manager import browser_manager
+
 class BrowserAutomation:
 
     @staticmethod
@@ -34,7 +36,45 @@ class BrowserAutomation:
                     "Run: pip install playwright && playwright install chromium")
 
     @staticmethod
+    def smart_open(url: str, workspace: Optional[int] = None) -> str:
+        """
+        Smart open with tab/workspace awareness.
+        Uses BrowserManager - checks existing tabs/windows first.
+        """
+        err = BrowserAutomation._check()
+        if err:
+            return err
+        
+        try:
+            loop = asyncio.get_event_loop()
+            return loop.run_until_complete(browser_manager.get_or_open_tab(url, workspace))
+        except Exception as e:
+            return f"❌ Smart open failed: {e}"
+
+    @staticmethod
+    def list_tabs(workspace: Optional[int] = None) -> str:
+        """List open tabs in workspace."""
+        try:
+            loop = asyncio.get_event_loop()
+            return loop.run_until_complete(browser_manager.list_tabs(workspace))
+        except Exception as e:
+            return f"❌ List tabs failed: {e}"
+
+    @staticmethod
+    def switch_to_tab(query: str, workspace: Optional[int] = None) -> str:
+        """Switch to existing tab matching query."""
+        try:
+            loop = asyncio.get_event_loop()
+            return loop.run_until_complete(browser_manager.switch_to_tab(query, workspace))
+        except Exception as e:
+            return f"❌ Switch tab failed: {e}"
+
+    @staticmethod
     def open_url(url: str, headless: bool = False) -> str:
+        """
+        Legacy: Open in new isolated context (for scraping).
+        Use smart_open() for persistent tabs.
+        """
         err = BrowserAutomation._check()
         if err:
             return err
@@ -49,7 +89,7 @@ class BrowserAutomation:
                 await page.goto(url, timeout=30000)
                 title = await page.title()
                 await browser.close()
-                return f"✅ Opened: {title} ({url})"
+                return f"✅ Opened (isolated): {title} ({url})"
         return _run(_go())
 
     @staticmethod

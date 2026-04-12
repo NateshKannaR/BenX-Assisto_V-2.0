@@ -7,10 +7,12 @@ import base64
 import logging
 import math
 import hashlib
+import threading
 import requests
-from typing import Optional, Dict, List, Any
+from typing import Optional, Dict, List, Any, Union, Generator
 from datetime import datetime
 from pathlib import Path
+from functools import lru_cache
 
 from jarvis_ai.config import Config
 
@@ -106,12 +108,25 @@ class RAGEngine:
             logger.error(f"Failed to save vector DB: {e}")
     
     def get_embedding(self, text: str) -> Optional[Any]:
-        """Get embedding for text using sentence-transformers or deterministic hashing fallback."""
-        if text in self.embeddings_cache:
-            return self.embeddings_cache[text]
-        
+        """Get embedding for text using sentence-transformers or deterministic hashing fallback.
+        Uses an LRU cache keyed on text to avoid re-embedding identical strings.
+        """
+        # LRU cache lookup (uses internal dict bounded by Config.EMBEDDING_CACHE_SIZE)
+        cached = self.embeddings_cache.get(text)
+        if cached is not None:
+            return cached
+
+        # Evict oldest entry if cache is full
+        cache_max = getattr(Config, "EMBEDDING_CACHE_SIZE", 512)
+        if len(self.embeddings_cache) >= cache_max:
+            # Remove the oldest-inserted key
+            try:
+                oldest = next(iter(self.embeddings_cache))
+                del self.embeddings_cache[oldest]
+            except StopIteration:
+                pass
+
         if np is None:
-            # Fallback: return None if numpy not available
             return None
 
         normalized = " ".join(text.lower().split())
@@ -267,6 +282,69 @@ class AIEngine:
         return "chat"
 
     @staticmethod
+    def _vote_best_response(responses: List[str]) -> str:
+        """Pick the highest-quality response from a list using simple heuristics.
+        Prefers longer, more structured responses with code or bullet points.
+        """
+        if not responses:
+            return "❌ No responses collected."
+        if len(responses) == 1:
+            return responses[0]
+
+        def score(r: str) -> float:
+            s = len(r) * 0.4
+            if "```" in r:    s += 80
+            if "\n- " in r:   s += 30
+            if "\n* " in r:   s += 30
+            if "1." in r:     s += 20
+            if "❌" in r:      s -= 200
+            return s
+
+        return max(responses, key=score)
+
+    @staticmethod
+    def _multi_model_query(system_prompt: str, user_prompt: str,
+                           models: List[str],
+                           conversation_context: List[Dict] = None) -> str:
+        """Query top-2 models in parallel threads and vote on the best answer."""
+        results = []
+        lock = threading.Lock()
+
+        def call_model(model: str):
+            headers = {
+                "Authorization": f"Bearer {Config.GROQ_KEY}",
+                "Content-Type": "application/json"
+            }
+            messages = [{"role": "system", "content": system_prompt}]
+            if conversation_context:
+                messages.extend(conversation_context[-20:])
+            messages.append({"role": "user", "content": user_prompt})
+            try:
+                data = {"model": model, "messages": messages, "temperature": 0.7,
+                        "max_tokens": 4000, "top_p": 0.9, "stream": False}
+                response = requests.post(Config.API_URL, headers=headers, json=data,
+                                         timeout=Config.API_TIMEOUT)
+                if response.status_code == 200:
+                    r = response.json()
+                    if "choices" in r and r["choices"]:
+                        with lock:
+                            results.append(r["choices"][0]["message"]["content"])
+            except Exception as e:
+                logger.warning(f"Voting model {model} failed: {e}")
+
+        top_models = models[:2]
+        threads = [threading.Thread(target=call_model, args=(m,), daemon=True) for m in top_models]
+        for t in threads: t.start()
+        for t in threads: t.join(timeout=Config.API_TIMEOUT)
+
+        if results:
+            return AIEngine._vote_best_response(results)
+        # Fallback to single-model path with remaining models
+        return AIEngine.query_groq(system_prompt, user_prompt,
+                                   conversation_context=conversation_context,
+                                   task_type="chat")
+
+    @staticmethod
     def query_groq(system_prompt: str, user_prompt: str,
                    model_preference: Optional[str] = None,
                    conversation_context: List[Dict] = None,
@@ -287,10 +365,6 @@ class AIEngine:
         # ── non-streaming path always returns str ──────────────────────────
         if not Config.GROQ_KEY:
             return "\u274c Missing GROQ_API_KEY. Set it in your environment before running."
-        headers = {
-            "Authorization": f"Bearer {Config.GROQ_KEY}",
-            "Content-Type": "application/json"
-        }
         if task_type is None:
             task_type = AIEngine._detect_task_type(user_prompt, use_vision)
         route = Config.MODEL_ROUTES.get(task_type, Config.MODEL_ROUTES["chat"])
@@ -299,6 +373,21 @@ class AIEngine:
             models.remove(model_preference)
             models.insert(0, model_preference)
         logger.info(f"\U0001f9e0 Task type: {task_type} \u2192 primary model: {models[0]}")
+
+        # Multi-model voting for reasoning tasks (when not streaming)
+        voting_enabled = getattr(Config, "MULTI_MODEL_VOTING_ENABLED", True)
+        if task_type == "reason" and voting_enabled and not stream and not use_vision:
+            logger.info("\U0001f5f3\ufe0f  Using multi-model voting for reasoning task")
+            return AIEngine._multi_model_query(
+                system_prompt, user_prompt,
+                models=models,
+                conversation_context=conversation_context,
+            )
+
+        headers = {
+            "Authorization": f"Bearer {Config.GROQ_KEY}",
+            "Content-Type": "application/json"
+        }
         messages = [{"role": "system", "content": system_prompt}]
         if conversation_context:
             messages.extend(conversation_context[-30:])
@@ -594,6 +683,11 @@ Structure response:
 Examples:
 "in ws 1 type ls -la" → {"command":"type_in_ws_terminal","workspace":1,"text":"ls -la"}
 "in that terminal type hello" → {"command":"type_in_active_window","text":"hello"}
+"in claude type hello" → {"command":"type_in_app","app":"claude","text":"hello"}
+"in chrome type search" → {"command":"type_in_app","app":"chrome","text":"search"}
+"in vscode type hello world" → {"command":"type_in_app","app":"vscode","text":"hello world"}
+"in firefox type query" → {"command":"type_in_app","app":"firefox","text":"query"}
+"in ws1 open claude" → {"command":"browser_open","url":"https://claude.ai","workspace":1}
 
 
 THINKING PROCESS:

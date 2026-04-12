@@ -35,6 +35,20 @@ except ImportError as e:
     GUI_AVAILABLE = False
     logger.warning(f"Beautiful GTK4 GUI not available: {e}")
 
+# Check system monitor
+try:
+    from jarvis_ai.system_monitor import start_monitor as _start_monitor
+    MONITOR_AVAILABLE = True
+except ImportError:
+    MONITOR_AVAILABLE = False
+
+# Check wake-word engine
+try:
+    from jarvis_ai.wake_word_engine import WakeWordEngine
+    WAKE_WORD_AVAILABLE = True
+except ImportError:
+    WAKE_WORD_AVAILABLE = False
+
 
 class BenX:
     """Main BenX application"""
@@ -44,6 +58,8 @@ class BenX:
         self.use_gui = use_gui and GUI_AVAILABLE
         self.setup_signal_handlers()
         self.gui = None
+        self._monitor = None
+        self._wake_word = None
     
     def setup_signal_handlers(self):
         """Setup graceful shutdown"""
@@ -54,11 +70,32 @@ class BenX:
         """Handle shutdown signals"""
         print("\n\nBenX: Shutting down gracefully... 👋")
         self.running = False
+        if self._monitor:
+            self._monitor.stop()
         if self.gui and self.gui.root:
             try:
                 self.gui.root.quit()
             except:
                 pass
+
+    def _start_background_services(self, ai_engine=None):
+        """Start background services: system monitor + wake-word."""
+        # System monitor
+        if MONITOR_AVAILABLE:
+            try:
+                self._monitor = _start_monitor(ai_engine=ai_engine)
+                logger.info("✅ System monitor started")
+            except Exception as e:
+                logger.warning(f"System monitor failed to start: {e}")
+
+        # Wake-word engine (runs in its own daemon thread)
+        if WAKE_WORD_AVAILABLE:
+            try:
+                self._wake_word = WakeWordEngine()
+                self._wake_word.start()
+                logger.info("✅ Wake-word engine started")
+            except Exception as e:
+                logger.warning(f"Wake-word engine failed to start: {e}")
     
     def save_command(self, command: str):
         """Save command to history"""
@@ -90,7 +127,7 @@ class BenX:
         print("🎯 BenX - Advanced Assistant with RAG & Image Sensing")
         print("=" * 60)
         print("\nType 'help' for commands or just speak naturally!")
-        print("Examples: 'open chrome', 'volume 80', 'what's the weather'")
+        print("Examples: 'open chrome', 'volume 80', 'what\'s the weather'")
         print("=" * 60 + "\n")
         
         logger.info("BenX started (CLI mode)")
@@ -98,7 +135,10 @@ class BenX:
         from jarvis_ai.executor import CommandExecutor
         
         ai_engine = AIEngine()
-        
+
+        # Start background services
+        self._start_background_services(ai_engine)
+
         while self.running:
             try:
                 user_input = input("You: ").strip()
