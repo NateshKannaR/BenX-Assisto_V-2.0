@@ -3,10 +3,7 @@
   "builds": [
     {
       "src": "src/main.py",
-      "use": "@vercel/python",
-      "config": {
-        "requirementsFile": "requirements-web.txt"
-      }
+      "use": "@vercel/python"
     },
     {
       "src": "src/css/**",
