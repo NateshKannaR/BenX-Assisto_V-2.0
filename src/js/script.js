@@ -10,8 +10,8 @@ const API_BASE    = window.location.origin;
 const WS_URL      = `${window.location.protocol === "https:" ? "wss:" : "ws:"}//${window.location.host}/ws`;
 const METRICS_INT = 3000;
 const ACTIVITY_INT = 8000;
-// Set true on Railway/VPS (real server), false on Vercel (serverless)
-const WS_ENABLED  = true;
+// Auto-detect: Vercel sets window.location.hostname ending in .vercel.app
+const WS_ENABLED  = !window.location.hostname.includes("vercel.app");
 
 // ── DOM refs ─────────────────────────────────────────────────
 const ui = {
@@ -389,6 +389,12 @@ async function submitMessage(text) {
 }
 
 async function submitViaSSE(text, model, agentMode) {
+  // On Vercel use plain POST (SSE times out on serverless)
+  if (!WS_ENABLED) {
+    await submitViaPost(text, model, agentMode);
+    return;
+  }
+
   const params = new URLSearchParams({ message: text, agent_mode: agentMode });
   if (model) params.append("model", model);
 
@@ -420,6 +426,27 @@ async function submitViaSSE(text, model, agentMode) {
     enableInput();
     setThinking("Operational");
   }
+}
+
+async function submitViaPost(text, model, agentMode) {
+  removeTypingIndicator();
+  startAssistantStream();
+  try {
+    const form = new FormData();
+    form.append("message", text);
+    form.append("agent_mode", agentMode);
+    if (model) form.append("model", model);
+
+    const res = await fetch(`${API_BASE}/api/chat`, { method: "POST", body: form });
+    const data = await res.json();
+    finaliseStream(data.response || "❌ No response.");
+    addActivity(`BenX replied via POST.`);
+  } catch (e) {
+    finaliseStream(`❌ ${e.message}`, false, true);
+  }
+  isStreaming = false;
+  enableInput();
+  setThinking("Operational");
 }
 
 async function submitWithImage(text, file) {
