@@ -1,4 +1,5 @@
 # New fallback method for ai_engine.py
+from typing import Optional, List, Dict
 def _openai_fallback(self, system_prompt: str, user_prompt: str, conversation_context: List[Dict] = None, image_path: Optional[str] = None, use_vision: bool = False, groq_error: str = "") -> str:
     """OpenAI + local LLM fallback when Groq fails."""
     try:
