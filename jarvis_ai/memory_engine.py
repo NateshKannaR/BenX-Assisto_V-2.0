@@ -29,11 +29,12 @@ class MemoryEngine:
         self.db = None
         if MONGO_AVAILABLE:
             try:
-                self.mongo_client = MongoClient(Config.MONGODB_URI)
+                self.mongo_client = MongoClient(Config.MONGODB_URI, serverSelectionTimeoutMS=3000)
                 self.db = self.mongo_client[Config.DATABASE_NAME]
-                self.db.command("ping")  # Test connection
+                self.mongo_client.admin.command("ping")  # Test connection
                 logger.info("✅ MongoDB Atlas connected")
             except Exception as e:
+                self.db = None
                 logger.warning(f"MongoDB connect failed: {e}")
         
         self.short_term = []
@@ -43,7 +44,7 @@ class MemoryEngine:
 
     def load_memory(self):
         # Try MongoDB first (cross-platform)
-        if self.db is not None:
+        if self.db is not None:  # explicit None check — pymongo Database has no bool
             try:
                 facts_cursor = self.db.facts.find()
                 self.facts = {doc["key"]: doc["value"] for doc in facts_cursor}
@@ -76,7 +77,7 @@ class MemoryEngine:
 
     def save_memory(self):
         # Sync to MongoDB first
-        if self.db is not None:
+        if self.db is not None:  # explicit None check
             try:
                 # Save facts
                 for key, value in self.facts.items():

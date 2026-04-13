@@ -15,7 +15,7 @@ echo "🔄 Testing MongoDB connection..."
 python3 -c "
 from jarvis_ai.memory_engine import MemoryEngine
 me = MemoryEngine()
-print('✅ MongoDB ready' if me.db else '⚠️ Using local fallback')
+print('✅ MongoDB ready' if me.db is not None else '⚠️ Using local fallback')
 "
 
 echo "🌐 BenX Web Server (w/ Mobile Control + MongoDB) starting..."
