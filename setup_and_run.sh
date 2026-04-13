@@ -50,7 +50,13 @@ echo ""
 
 # System deps reminder
 echo "💡 Install system deps if needed:"
-echo "Arch: sudo pacman -S gtk4 libadwaita python-gobject tesseract grim"
-echo "Ubuntu: sudo apt install libgtk-4-1 libadwaita-1-0 python3-gi tesseract-ocr grim"
+echo "Arch: sudo pacman -S gtk4 libadwaita python-gobject tesseract grim android-tools"
+echo "Ubuntu: sudo apt install libgtk-4-1 libadwaita-1-0 python3-gi tesseract-ocr grim adb"
+echo ""
+echo "📱 Mobile Setup:"
+echo "1. Enable Developer Options + USB Debugging on Android"
+echo "2. Connect phone: adb devices (authorize USB)"
+echo "3. python jarvis_ai/mobile_automation.py test"
 
 python3 benx.py "$@"
+

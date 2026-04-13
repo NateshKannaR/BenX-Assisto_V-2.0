@@ -221,6 +221,41 @@ async def get_models():
     except Exception as e:
         return {"models": [], "error": str(e)}
 
+@app.get("/api/mobile/devices")
+async def mobile_devices():
+    """List connected mobile devices"""
+    try:
+        from jarvis_ai.mobile_automation import MobileAutomationEngine
+        eng = MobileAutomationEngine()
+        devices = [d.serial for d in eng.client.devices()]
+        return {"devices": devices}
+    except Exception as e:
+        return {"devices": [], "error": str(e)}
+
+@app.get("/api/mobile/apps")
+async def mobile_apps():
+    """List apps on connected device"""
+    try:
+        from jarvis_ai.mobile_automation import MobileAutomationEngine
+        eng = MobileAutomationEngine()
+        apps = eng.list_apps()
+        return {"apps": apps[:100]}  # Limit
+    except Exception as e:
+        return {"error": str(e)}
+
+@app.post("/api/mobile/automate")
+async def mobile_automate(instruction: str):
+    """Run mobile automation"""
+    try:
+        from jarvis_ai.ai_engine import AIEngine
+        from jarvis_ai.mobile_automation import MobileAutomationEngine
+        ai = AIEngine()
+        eng = MobileAutomationEngine(ai)
+        result = eng.automate(instruction)
+        return {"result": result}
+    except Exception as e:
+        return {"error": str(e)}
+
 
 async def _stream_chat_response(user_input: str, model: Optional[str], agent_mode: bool) -> AsyncGenerator[str, None]:
     """Core streaming generator used by both SSE and WebSocket paths."""

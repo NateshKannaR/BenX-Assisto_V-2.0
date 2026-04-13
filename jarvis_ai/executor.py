@@ -10,6 +10,7 @@ from jarvis_ai.ai_engine import AIEngine
 from jarvis_ai.command_engine import CommandEngine
 from jarvis_ai.screen_analyzer import ScreenAnalyzer
 from jarvis_ai.automation import AutomationEngine
+from jarvis_ai.mobile_automation import MobileAutomationEngine
 from jarvis_ai.project_orchestrator import ProjectOrchestrator
 from jarvis_ai.config import Config
 from jarvis_ai.plugin_manager import PluginManager
@@ -234,6 +235,11 @@ class CommandExecutor:
                 "pause_automation": lambda: CommandExecutor._pause_automation(ai_engine),
                 "resume_automation": lambda: CommandExecutor._resume_automation(ai_engine),
                 "screen_aware_click": lambda: CommandExecutor._screen_aware_click(obj.get("text", obj.get("query", obj.get("name", ""))), ai_engine),
+                "mobile_automate": lambda: CommandExecutor._mobile_automate(obj.get("instruction", user_input), ai_engine),
+                "mobile_tap": lambda: CommandExecutor._mobile_tap(obj.get("text", obj.get("x", None), obj.get("y", None)), ai_engine),
+                "mobile_screenshot": lambda: CommandExecutor._mobile_screenshot(ai_engine),
+                "mobile_ocr": lambda: CommandExecutor._mobile_ocr(ai_engine),
+                "mobile_apps": lambda: CommandExecutor._mobile_apps(ai_engine),
                 "search_github": lambda: CommandEngine.search_github(obj.get("query", "")),
                 "open_whatsapp_contact": lambda: CommandEngine.open_whatsapp_contact(obj.get("contact", "")),
                 "send_whatsapp_message": lambda: CommandEngine.send_whatsapp_message(
@@ -645,6 +651,75 @@ class CommandExecutor:
         if not hasattr(ai_engine, "automation_engine"):
             ai_engine.automation_engine = AutomationEngine(ai_engine)
         return ai_engine.automation_engine
+
+    @staticmethod
+    def _get_mobile_engine(ai_engine: AIEngine) -> 'MobileAutomationEngine':
+        if not hasattr(ai_engine, "mobile_engine"):
+            ai_engine.mobile_engine = MobileAutomationEngine(ai_engine)
+        return ai_engine.mobile_engine
+
+    @staticmethod
+    def _mobile_automate(instruction: str, ai_engine: AIEngine) -> str:
+        if not ai_engine:
+            return "❌ AI engine required"
+        try:
+            mobile_eng = CommandExecutor._get_mobile_engine(ai_engine)
+            return mobile_eng.automate(instruction)
+        except Exception as e:
+            return f"❌ Mobile automation error: {str(e)}. Run 'adb devices' & connect phone."
+
+    @staticmethod
+    def _mobile_tap(text: str = None, x: int = None, y: int = None, ai_engine: AIEngine = None) -> str:
+        if not ai_engine:
+            return "❌ AI engine required"
+        try:
+            mobile_eng = CommandExecutor._get_mobile_engine(ai_engine)
+            if not mobile_eng.device:
+                mobile_eng.connect()
+            if text:
+                return mobile_eng.tap(text=text)
+            elif x and y:
+                return mobile_eng.tap(x=x, y=y)
+            return "❌ Specify text or x,y"
+        except Exception as e:
+            return f"❌ Mobile tap failed: {str(e)}"
+
+    @staticmethod
+    def _mobile_screenshot(ai_engine: AIEngine = None) -> str:
+        if not ai_engine:
+            return "❌ AI engine required"
+        try:
+            mobile_eng = CommandExecutor._get_mobile_engine(ai_engine)
+            if not mobile_eng.device:
+                mobile_eng.connect()
+            return mobile_eng.screenshot()
+        except Exception as e:
+            return f"❌ Mobile screenshot failed: {str(e)}"
+
+    @staticmethod
+    def _mobile_ocr(ai_engine: AIEngine = None) -> str:
+        if not ai_engine:
+            return "❌ AI engine required"
+        try:
+            mobile_eng = CommandExecutor._get_mobile_engine(ai_engine)
+            if not mobile_eng.device:
+                mobile_eng.connect()
+            return mobile_eng.ocr_screen()
+        except Exception as e:
+            return f"❌ Mobile OCR failed: {str(e)}"
+
+    @staticmethod
+    def _mobile_apps(ai_engine: AIEngine = None) -> str:
+        if not ai_engine:
+            return "❌ AI engine required"
+        try:
+            mobile_eng = CommandExecutor._get_mobile_engine(ai_engine)
+            if not mobile_eng.device:
+                mobile_eng.connect()
+            apps = mobile_eng.list_apps()
+            return f"📱 Apps ({len(apps)}): {', '.join(apps[:20])}{'...' if len(apps)>20 else ''}"
+        except Exception as e:
+            return f"❌ Mobile apps list failed: {str(e)}"
 
     @staticmethod
     def _schedule_task(obj: dict, user_input: str, ai_engine: AIEngine) -> str:

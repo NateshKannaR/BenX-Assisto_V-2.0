@@ -1400,6 +1400,45 @@ class CommandEngine:
         from jarvis_ai.workspace_monitor import WorkspaceMonitor
         return WorkspaceMonitor.toggle_float()
 
+    # Mobile Commands (CLI entrypoints)
+    @staticmethod
+    def mobile_connect(device_id: str = None) -> str:
+        '''Connect to mobile device'''
+        from jarvis_ai.mobile_automation import MobileAutomationEngine
+        eng = MobileAutomationEngine()
+        return eng.connect(device_id)
+
+    @staticmethod
+    def mobile_list_apps() -> str:
+        '''List mobile apps'''
+        from jarvis_ai.mobile_automation import MobileAutomationEngine
+        eng = MobileAutomationEngine()
+        if not eng.device:
+            eng.connect()
+        return '\\n'.join(eng.list_apps())
+
+    @staticmethod
+    def mobile_tap(text_or_coord: str = None, x: int = None, y: int = None) -> str:
+        '''Tap on mobile by text or coordinates'''
+        from jarvis_ai.mobile_automation import MobileAutomationEngine
+        eng = MobileAutomationEngine()
+        if not eng.device:
+            eng.connect()
+        if x and y:
+            return eng.tap(x, y)
+        elif text_or_coord:
+            return eng.tap(text=text_or_coord)
+        return "❌ Specify text or x,y"
+
+    @staticmethod
+    def mobile_automation(instruction: str) -> str:
+        '''AI-powered mobile automation'''
+        from jarvis_ai.ai_engine import AIEngine
+        from jarvis_ai.mobile_automation import MobileAutomationEngine
+        ai = AIEngine()
+        eng = MobileAutomationEngine(ai)
+        return eng.automate(instruction)
+
 
 
 

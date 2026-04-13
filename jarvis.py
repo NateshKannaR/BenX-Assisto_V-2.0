@@ -2299,7 +2299,9 @@ class JarvisGUI:
             ("System Info", "system info"),
             ("Battery", "battery status"),
             ("Weather", "what's the weather"),
-            ("Screenshot", "take screenshot")
+            ("Screenshot", "take screenshot"),
+            ("Mobile Apps", "mobile apps"),
+            ("Mobile Connect", "mobile connect")
         ]
         
         for text, command in quick_actions:

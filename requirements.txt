@@ -11,3 +11,4 @@ uvicorn[standard]
 websockets
 qrcode[pil]
 pillow
+pure-python-adb
