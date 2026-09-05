@@ -1,18 +1,16 @@
 #!/usr/bin/env python3
 """
-BenX TUI — Ultimate Terminal User Interface (Full GTK4 Parity)
-Arch Linux + Hyprland (Wayland) Native AI Assistant Console
+BenX TUI — Modern, Clean Terminal AI Assistant
+Arch Linux + Hyprland (Wayland) Native Console
 
 Features:
-- Interactive Hyprland Workspace Tracker (1-10) with click-to-switch & active indicators
-- Live Window Manager Controls (Float, Pin, Fullscreen, Move L/R, Group/Tab, Close)
-- Layout Templates (Save & Restore Hyprland desktop arrangements)
-- Hardware & Laptop Control Panel (Power Saver, Balanced, Performance profiles, Lock, Suspend)
-- Safety Confirmation Modal Dialogs for destructive system actions
-- Settings Modal Dialog (Model selector, OpenRouter & Groq API key manager, autostart toggle)
-- Clipboard History Manager Modal (cliphist search & paste)
-- Real-time Audio Waveform Visualizer (20fps ASCII/Braille animation tied to wake-word/assistant states)
-- 3-Panel Cyberpunk Layout with Live Telemetry, Top Processes, Mission Stream, and ReAct Agent
+- Clean, modern Obsidian/Tokyo-Night aesthetic with subtle borders and card styling
+- Spacious primary AI conversation view with rich markdown formatting and syntax highlighting
+- Clean telemetry sidebar with real-time btop-style meters (CPU, RAM, Disk, Net, Battery)
+- Live Hyprland desktop integration (workspaces, active window, window actions)
+- Laptop hardware control (power profiles, screen lock, clipboard manager, sleep)
+- Animated audio waveform visualizer (20fps reactive ASCII bars)
+- Interactive modal preferences (F6) and safety confirmation gates
 """
 import sys
 import os
@@ -31,16 +29,16 @@ from rich.text import Text
 from rich.markdown import Markdown
 from textual.app import App, ComposeResult
 from textual.widgets import (
-    Header, Footer, Input, RichLog, Static, Label, Select, Switch, Button, OptionList
+    Input, RichLog, Static, Label, Select, Switch, Button, OptionList
 )
 from textual.widgets.option_list import Option
-from textual.containers import Horizontal, Vertical, Container, Grid, ScrollableContainer
+from textual.containers import Horizontal, Vertical, Container, ScrollableContainer
 from textual.screen import ModalScreen
 from textual.binding import Binding
 from textual.reactive import reactive
 from textual import work
 
-# ── Hyprland & Laptop Control Imports ─────────────────────────────────────────
+# ── Hyprland & System Imports ────────────────────────────────────────────────
 try:
     from jarvis_ai.hyprland.workspace import WorkspaceManager
     from jarvis_ai.hyprland.window import WindowManager
@@ -80,66 +78,66 @@ except Exception:
     ]
 
 QUICK_ACTIONS = [
-    ("👁️ OCR Screen",      "analyze my screen and describe what you see"),
     ("⚡ Automate",        "automate opening chrome and going to github.com"),
     ("📸 Screenshot",      "take a screenshot"),
+    ("👁️ Screen OCR",      "analyze my screen and describe what you see"),
     ("🔋 Power Saver",     "set power profile to power-saver"),
     ("📊 Top Procs",       "show top cpu processes"),
-    ("🔍 Pacman Update",   "check system updates"),
+    ("🔍 Check Updates",   "check system updates"),
     ("📱 Mobile ADB",      "check connected mobile phone and list UI elements"),
-    ("🪟 Switch WS 1",     "switch to workspace 1"),
+    ("🪟 Workspaces",      "list workspaces"),
 ]
 
 
 # ═════════════════════════════════════════════════════════════════════════════
-# MODAL DIALOGS
+# MODAL SCREENS (MODERN CLEAN DESIGN)
 # ═════════════════════════════════════════════════════════════════════════════
 
 class TUIConfirmModal(ModalScreen[bool]):
-    """Modal confirmation safety gate for destructive operations"""
+    """Clean modern safety confirmation modal"""
     CSS = """
     TUIConfirmModal {
         align: center middle;
-        background: rgba(0, 0, 0, 0.75);
+        background: rgba(10, 14, 20, 0.85);
     }
-    #confirm-dialog {
-        width: 54;
+    #confirm-box {
+        width: 50;
         height: auto;
-        background: #061017;
-        border: thick #ff6b6b;
+        background: #161b22;
+        border: round #f85149;
         padding: 1 2;
     }
-    #confirm-title {
-        color: #ff6b6b;
+    #confirm-header {
+        color: #f85149;
         text-style: bold;
         text-align: center;
         margin-bottom: 1;
     }
-    #confirm-msg {
-        color: #eafaf1;
+    #confirm-body {
+        color: #e6edf3;
         text-align: center;
         margin-bottom: 2;
     }
-    #confirm-buttons {
+    #confirm-actions {
         height: 3;
         align: center middle;
     }
-    #btn-confirm {
-        background: #4a1515;
-        border: solid #ff6b6b;
-        color: #ff6b6b;
+    #btn-yes {
+        background: #da3633;
+        color: #ffffff;
+        border: none;
         margin-right: 2;
     }
-    #btn-confirm:hover {
-        background: #782020;
+    #btn-yes:hover {
+        background: #f85149;
     }
-    #btn-cancel {
-        background: #0e2b1f;
-        border: solid #60ffb9;
-        color: #60ffb9;
+    #btn-no {
+        background: #21262d;
+        color: #c9d1d9;
+        border: none;
     }
-    #btn-cancel:hover {
-        background: #184c36;
+    #btn-no:hover {
+        background: #30363d;
     }
     """
 
@@ -154,15 +152,15 @@ class TUIConfirmModal(ModalScreen[bool]):
         self.modal_message = message
 
     def compose(self) -> ComposeResult:
-        with Vertical(id="confirm-dialog"):
-            yield Label(f"⚠️ {self.modal_title}", id="confirm-title")
-            yield Label(self.modal_message, id="confirm-msg")
-            with Horizontal(id="confirm-buttons"):
-                yield Button("Proceed (Enter)", id="btn-confirm")
-                yield Button("Cancel (Esc)", id="btn-cancel")
+        with Vertical(id="confirm-box"):
+            yield Label(f"⚠️  {self.modal_title}", id="confirm-header")
+            yield Label(self.modal_message, id="confirm-body")
+            with Horizontal(id="confirm-actions"):
+                yield Button("Proceed (Enter)", id="btn-yes")
+                yield Button("Cancel (Esc)", id="btn-no")
 
     def on_button_pressed(self, event: Button.Pressed):
-        if event.button.id == "btn-confirm":
+        if event.button.id == "btn-yes":
             self.dismiss(True)
         else:
             self.dismiss(False)
@@ -175,65 +173,68 @@ class TUIConfirmModal(ModalScreen[bool]):
 
 
 class TUISettingsModal(ModalScreen[None]):
-    """Modal Preferences dialog matching BenXSettingsWindow in GTK4"""
+    """Clean, modern preferences dialog"""
     CSS = """
     TUISettingsModal {
         align: center middle;
-        background: rgba(0, 0, 0, 0.75);
+        background: rgba(10, 14, 20, 0.85);
     }
-    #settings-dialog {
-        width: 68;
+    #settings-box {
+        width: 66;
         height: auto;
         max-height: 85%;
-        background: #040c12;
-        border: thick #60ffb9;
+        background: #161b22;
+        border: round #38bdf8;
         padding: 1 2;
     }
-    #settings-title {
-        color: #60ffb9;
+    #settings-header {
+        color: #38bdf8;
         text-style: bold;
         text-align: center;
         margin-bottom: 1;
     }
-    .settings-section {
-        color: #61d8ff;
+    .cfg-group {
+        color: #7ee787;
         text-style: bold;
         margin-top: 1;
         margin-bottom: 0;
     }
-    .settings-row {
+    .cfg-row {
         height: 3;
         align: left middle;
         margin-bottom: 1;
     }
-    .settings-label {
+    .cfg-label {
         width: 22;
-        color: #8eb5ac;
+        color: #8b949e;
     }
-    .settings-input {
+    .cfg-input {
         width: 1fr;
-        background: #020609;
-        border: solid #143626;
-        color: #eafaf1;
+        background: #0d1117;
+        border: round #30363d;
+        color: #f0f6fc;
     }
-    #settings-buttons {
+    .cfg-input:focus {
+        border: round #38bdf8;
+    }
+    #settings-actions {
         height: 3;
         margin-top: 1;
         align: right middle;
     }
-    #btn-settings-save {
-        background: #0e3b28;
-        border: solid #60ffb9;
-        color: #60ffb9;
+    #btn-cfg-save {
+        background: #238636;
+        color: #ffffff;
+        border: none;
         margin-right: 1;
     }
-    #btn-settings-save:hover {
-        background: #185e40;
+    #btn-cfg-save:hover {
+        background: #2ea043;
     }
-    #btn-settings-close {
-        background: #18222d;
-        border: solid #61d8ff;
-        color: #61d8ff;
+    #btn-cfg-close {
+        background: #21262d;
+        color: #c9d1d9;
+        border: none;
     }
     """
 
@@ -242,42 +243,42 @@ class TUISettingsModal(ModalScreen[None]):
     ]
 
     def compose(self) -> ComposeResult:
-        with Vertical(id="settings-dialog"):
-            yield Label("⚙️  BENX ASSISTANT PREFERENCES", id="settings-title")
+        with Vertical(id="settings-box"):
+            yield Label("⚙️  BenX Preferences", id="settings-header")
 
-            yield Label("◈ AI & MODEL ROUTING", classes="settings-section")
-            with Horizontal(classes="settings-row"):
-                yield Label("Default Model:", classes="settings-label")
+            yield Label("Model Routing", classes="cfg-group")
+            with Horizontal(classes="cfg-row"):
+                yield Label("Default Model:", classes="cfg-label")
                 yield Select([(m, m) for m in MODELS], value=MODELS[0], id="set-model-select")
 
-            yield Label("◈ API CREDENTIALS", classes="settings-section")
-            with Horizontal(classes="settings-row"):
-                yield Label("OpenRouter API Key:", classes="settings-label")
+            yield Label("API Credentials", classes="cfg-group")
+            with Horizontal(classes="cfg-row"):
+                yield Label("OpenRouter Key:", classes="cfg-label")
                 openrouter_val = os.getenv("OPENROUTER_API_KEY", "")
                 masked_openrouter = (openrouter_val[:6] + "..." + openrouter_val[-4:]) if len(openrouter_val) > 10 else openrouter_val
-                yield Input(value=masked_openrouter, placeholder="sk-or-v1-...", id="set-openrouter-key", classes="settings-input")
+                yield Input(value=masked_openrouter, placeholder="sk-or-v1-...", id="set-openrouter-key", classes="cfg-input")
 
-            with Horizontal(classes="settings-row"):
-                yield Label("Groq API Key:", classes="settings-label")
+            with Horizontal(classes="cfg-row"):
+                yield Label("Groq Key:", classes="cfg-label")
                 groq_val = os.getenv("GROQ_API_KEY", "")
                 masked_groq = (groq_val[:6] + "..." + groq_val[-4:]) if len(groq_val) > 10 else groq_val
-                yield Input(value=masked_groq, placeholder="gsk_...", id="set-groq-key", classes="settings-input")
+                yield Input(value=masked_groq, placeholder="gsk_...", id="set-groq-key", classes="cfg-input")
 
-            yield Label("◈ HYPRLAND & AUTOMATION", classes="settings-section")
-            with Horizontal(classes="settings-row"):
-                yield Label("Hyprland Dynamic Rules:", classes="settings-label")
+            yield Label("System Automation", classes="cfg-group")
+            with Horizontal(classes="cfg-row"):
+                yield Label("Hyprland Rules:", classes="cfg-label")
                 yield Switch(value=True, id="set-rules-switch")
-            with Horizontal(classes="settings-row"):
-                yield Label("Autostart on Login:", classes="settings-label")
+            with Horizontal(classes="cfg-row"):
+                yield Label("Autostart on Login:", classes="cfg-label")
                 autostart_active = Path(os.path.expanduser("~/.config/autostart/benx.desktop")).exists()
                 yield Switch(value=autostart_active, id="set-autostart-switch")
 
-            with Horizontal(id="settings-buttons"):
-                yield Button("Save & Apply", id="btn-settings-save")
-                yield Button("Close (Esc)", id="btn-settings-close")
+            with Horizontal(id="settings-actions"):
+                yield Button("Save Changes", id="btn-cfg-save")
+                yield Button("Close", id="btn-cfg-close")
 
     def on_button_pressed(self, event: Button.Pressed):
-        if event.button.id == "btn-settings-save":
+        if event.button.id == "btn-cfg-save":
             self.save_settings()
         self.dismiss()
 
@@ -285,7 +286,6 @@ class TUISettingsModal(ModalScreen[None]):
         self.dismiss()
 
     def save_settings(self):
-        """Persist settings to local .env and config"""
         try:
             ork = self.query_one("#set-openrouter-key", Input).value.strip()
             grk = self.query_one("#set-groq-key", Input).value.strip()
@@ -318,7 +318,6 @@ class TUISettingsModal(ModalScreen[None]):
             with open(env_path, "w", encoding="utf-8") as f:
                 f.writelines(env_lines)
 
-            # Autostart desktop entry
             auto_dir = Path(os.path.expanduser("~/.config/autostart"))
             auto_file = auto_dir / "benx.desktop"
             if autostart:
@@ -330,60 +329,60 @@ class TUISettingsModal(ModalScreen[None]):
             elif auto_file.exists():
                 auto_file.unlink()
 
-            if hasattr(self.app, "_log_mission"):
-                self.app._log_mission("⚙️ Settings successfully saved and applied.")
+            if hasattr(self.app, "_log"):
+                self.app._log("⚙️ Preferences updated and saved.")
         except Exception as e:
-            if hasattr(self.app, "_log_mission"):
-                self.app._log_mission(f"⚠️ Error saving settings: {e}")
+            if hasattr(self.app, "_log"):
+                self.app._log(f"⚠️ Preferences error: {e}")
 
 
 class ClipboardModal(ModalScreen[None]):
-    """Modal Viewer for Wayland Clipboard History (cliphist)"""
+    """Clean Wayland clipboard history modal"""
     CSS = """
     ClipboardModal {
         align: center middle;
-        background: rgba(0, 0, 0, 0.75);
+        background: rgba(10, 14, 20, 0.85);
     }
-    #clip-dialog {
-        width: 72;
-        height: 24;
-        background: #040c12;
-        border: thick #61d8ff;
+    #clip-box {
+        width: 70;
+        height: 22;
+        background: #161b22;
+        border: round #38bdf8;
         padding: 1 2;
     }
-    #clip-title {
-        color: #61d8ff;
+    #clip-header {
+        color: #38bdf8;
         text-style: bold;
         text-align: center;
         margin-bottom: 1;
     }
-    #clip-filter {
+    #clip-filter-inp {
         height: 3;
-        background: #020609;
-        border: solid #143626;
-        color: #eafaf1;
+        background: #0d1117;
+        border: round #30363d;
+        color: #f0f6fc;
         margin-bottom: 1;
     }
-    #clip-list {
+    #clip-entries {
         height: 1fr;
-        background: #010305;
-        border: solid #143626;
+        background: #0d1117;
+        border: round #21262d;
     }
-    #clip-buttons {
+    #clip-actions {
         height: 3;
         margin-top: 1;
         align: right middle;
     }
-    #btn-clip-copy {
-        background: #0e3b28;
-        border: solid #60ffb9;
-        color: #60ffb9;
+    #btn-clip-select {
+        background: #238636;
+        color: #ffffff;
+        border: none;
         margin-right: 1;
     }
-    #btn-clip-close {
-        background: #18222d;
-        border: solid #61d8ff;
-        color: #61d8ff;
+    #btn-clip-dismiss {
+        background: #21262d;
+        color: #c9d1d9;
+        border: none;
     }
     """
 
@@ -397,39 +396,39 @@ class ClipboardModal(ModalScreen[None]):
         self.raw_items: List[str] = []
 
     def compose(self) -> ComposeResult:
-        with Vertical(id="clip-dialog"):
-            yield Label("📋  WAYLAND CLIPBOARD HISTORY (cliphist)", id="clip-title")
-            yield Input(placeholder="Search clipboard entries...", id="clip-filter")
-            yield OptionList(id="clip-list")
-            with Horizontal(id="clip-buttons"):
-                yield Button("Copy to Clipboard (Enter)", id="btn-clip-copy")
-                yield Button("Close (Esc)", id="btn-clip-close")
+        with Vertical(id="clip-box"):
+            yield Label("📋  Clipboard History", id="clip-header")
+            yield Input(placeholder="Search clipboard...", id="clip-filter-inp")
+            yield OptionList(id="clip-entries")
+            with Horizontal(id="clip-actions"):
+                yield Button("Copy Selected", id="btn-clip-select")
+                yield Button("Close", id="btn-clip-dismiss")
 
     def on_mount(self):
         self.load_history()
 
-    def load_history(self, filter_text: str = ""):
+    def load_history(self, query: str = ""):
         try:
             if HYPR_AVAILABLE:
                 self.raw_items = WaylandPeripherals.get_clipboard_history(30)
             else:
-                self.raw_items = ["Hyprland peripherals not available"]
+                self.raw_items = ["Clipboard provider not available"]
         except Exception as e:
             self.raw_items = [f"Error: {e}"]
 
-        opt_list = self.query_one("#clip-list", OptionList)
+        opt_list = self.query_one("#clip-entries", OptionList)
         opt_list.clear_options()
-        filtered = [it for it in self.raw_items if filter_text.lower() in it.lower()] if filter_text else self.raw_items
+        filtered = [it for it in self.raw_items if query.lower() in it.lower()] if query else self.raw_items
         for item in filtered:
-            clean_item = item.strip().replace("\n", " ")[:65]
+            clean_item = item.strip().replace("\n", " ")[:60]
             opt_list.add_option(Option(prompt=clean_item, id=clean_item))
 
     def on_input_changed(self, event: Input.Changed):
-        if event.input.id == "clip-filter":
+        if event.input.id == "clip-filter-inp":
             self.load_history(event.value)
 
     def on_button_pressed(self, event: Button.Pressed):
-        if event.button.id == "btn-clip-copy":
+        if event.button.id == "btn-clip-select":
             self.copy_selected()
         self.dismiss()
 
@@ -442,28 +441,25 @@ class ClipboardModal(ModalScreen[None]):
 
     def copy_selected(self):
         try:
-            opt_list = self.query_one("#clip-list", OptionList)
+            opt_list = self.query_one("#clip-entries", OptionList)
             if opt_list.highlighted is not None:
-                selected_opt = opt_list.get_option_at_index(opt_list.highlighted)
-                val = str(selected_opt.prompt)
+                opt = opt_list.get_option_at_index(opt_list.highlighted)
+                val = str(opt.prompt)
                 if HYPR_AVAILABLE:
                     WaylandPeripherals.paste_from_history(val)
-                if hasattr(self.app, "_log_mission"):
-                    self.app._log_mission(f"📋 Copied to clipboard: '{val[:40]}'")
+                if hasattr(self.app, "_log"):
+                    self.app._log(f"📋 Copied to clipboard: '{val[:35]}...'")
         except Exception as e:
-            if hasattr(self.app, "_log_mission"):
-                self.app._log_mission(f"⚠️ Clipboard copy error: {e}")
+            if hasattr(self.app, "_log"):
+                self.app._log(f"⚠️ Clipboard error: {e}")
 
 
 # ═════════════════════════════════════════════════════════════════════════════
-# AUDIO WAVEFORM VISUALIZER WIDGET (TUI GTK4 PARITY)
+# AUDIO WAVEFORM WIDGET
 # ═════════════════════════════════════════════════════════════════════════════
 
 class TUIWaveformWidget(Static):
-    """
-    Animated text-based audio waveform reacting to assistant & voice states.
-    States: 'idle', 'listening', 'detected', 'recording', 'thinking'.
-    """
+    """Subtle, modern animated audio waveform"""
     state: reactive[str] = reactive("idle")
     phase: float = 0.0
 
@@ -476,158 +472,61 @@ class TUIWaveformWidget(Static):
         self.state = new_state.lower()
 
     def tick(self):
-        self.phase += 0.22
-        num_bars = 24
+        self.phase += 0.25
+        num_bars = 16
         bars = []
 
         if self.state == "listening":
-            color = "#61d8ff"
-            state_tag = "LISTENING"
+            color = "#38bdf8"
+            tag = "Listening"
             for i in range(num_bars):
-                v = math.sin(self.phase + i * 0.45) * math.cos(self.phase * 0.5 + i * 0.2)
+                v = math.sin(self.phase + i * 0.5) * math.cos(self.phase * 0.4 + i * 0.25)
                 level = int(round((v + 1.0) / 2.0 * (len(self.BAR_CHARS) - 1)))
                 bars.append(self.BAR_CHARS[max(0, min(len(self.BAR_CHARS) - 1, level))])
-        elif self.state == "detected":
-            color = "#60ffb9"
-            state_tag = "DETECTED"
+        elif self.state == "thinking":
+            color = "#a78bfa"
+            tag = "Thinking"
             for i in range(num_bars):
-                v = math.sin(self.phase * 2.0 + i * 0.6)
+                v = (math.sin(self.phase + i * 0.35) + math.sin(self.phase * 1.2 - i * 0.4)) / 2.0
                 level = int(round((v + 1.0) / 2.0 * (len(self.BAR_CHARS) - 1)))
                 bars.append(self.BAR_CHARS[max(0, min(len(self.BAR_CHARS) - 1, level))])
         elif self.state == "recording":
-            color = "#ff6b6b"
-            state_tag = "RECORDING"
+            color = "#f85149"
+            tag = "Recording"
             for i in range(num_bars):
-                v = abs(math.sin(self.phase * 1.5 + i * 0.7) * math.sin(self.phase * 2.3 + i * 0.3))
+                v = abs(math.sin(self.phase * 1.5 + i * 0.7))
                 level = int(round(v * (len(self.BAR_CHARS) - 1)))
                 bars.append(self.BAR_CHARS[max(0, min(len(self.BAR_CHARS) - 1, level))])
-        elif self.state == "thinking":
-            color = "#b794ff"
-            state_tag = "THINKING"
-            for i in range(num_bars):
-                v = (math.sin(self.phase + i * 0.3) + math.sin(self.phase * 1.3 - i * 0.5)) / 2.0
-                level = int(round((v + 1.0) / 2.0 * (len(self.BAR_CHARS) - 1)))
-                bars.append(self.BAR_CHARS[max(0, min(len(self.BAR_CHARS) - 1, level))])
         else:  # idle
-            color = "#8eb5ac"
-            state_tag = "IDLE"
+            color = "#8b949e"
+            tag = "Ready"
             for i in range(num_bars):
-                v = math.sin(self.phase * 0.4 + i * 0.25) * 0.3
-                level = int(round((v + 0.3) / 1.0 * 2))
+                v = math.sin(self.phase * 0.3 + i * 0.2) * 0.25
+                level = int(round((v + 0.25) / 1.0 * 2))
                 bars.append(self.BAR_CHARS[max(0, min(len(self.BAR_CHARS) - 1, level))])
 
         bar_str = "".join(bars)
-        text = f"[{color}]{bar_str}[/{color}] [dim {color}]● {state_tag}[/dim {color}]"
-        self.update(text)
+        self.update(f"[{color}]{bar_str}[/{color}] [dim {color}]{tag}[/dim {color}]")
 
 
 # ═════════════════════════════════════════════════════════════════════════════
-# HYPRLAND WORKSPACE & WINDOW MANAGER BAR
+# SIDEBAR: SYSTEM TELEMETRY & DESKTOP CONTROLS
 # ═════════════════════════════════════════════════════════════════════════════
 
-class HyprlandBar(Static):
-    """
-    Interactive Hyprland Workspace & Active Window Controller.
-    Displays 1-10 workspace badges, active window title/class, and quick window actions.
-    """
+class SidebarPanel(Static):
+    """Clean, unified modern sidebar showing Telemetry, Hyprland & Hardware"""
 
     def on_mount(self):
-        self.update_hypr_state()
-        self.set_interval(1.8, self.update_hypr_state)
+        self.refresh_all()
+        self.set_interval(2.0, self.refresh_all)
 
-    def update_hypr_state(self):
-        if not HYPR_AVAILABLE:
-            self.update("[dim #8eb5ac]Hyprland IPC: Standby (Non-Hyprland Wayland)[/dim #8eb5ac]")
-            return
-
-        try:
-            active_ws = WorkspaceManager.get_active_workspace()
-            workspaces = WorkspaceManager.list_workspaces()
-            occupied_ws = {w.get("id"): w.get("windows", 0) for w in workspaces}
-
-            # Build 1-10 workspace chips
-            ws_parts = []
-            for i in range(1, 11):
-                if i == active_ws:
-                    ws_parts.append(f"[bold #03080d on #60ffb9] {i} [/bold #03080d on #60ffb9]")
-                elif i in occupied_ws:
-                    cnt = occupied_ws[i]
-                    ws_parts.append(f"[bold #61d8ff on #09202a] {i}:{cnt} [/bold #61d8ff on #09202a]")
-                else:
-                    ws_parts.append(f"[dim #8eb5ac] {i} [/dim #8eb5ac]")
-            ws_str = " ".join(ws_parts)
-
-            # Active Window
-            active_win = WindowManager.get_active_window()
-            win_title = active_win.get("title", "Desktop / No active window")[:42]
-            win_class = active_win.get("class", "desktop")[:18]
-            is_float = "🪟 Float" if active_win.get("floating", False) else "🔲 Tile"
-
-            text = (
-                f"[bold #61d8ff]◈ HYPRLAND WORKSPACES[/bold #61d8ff]  {ws_str}\n"
-                f"[bold #8eb5ac]Active Window:[/bold #8eb5ac] [bold white]{win_title}[/bold white] [dim #61d8ff]({win_class})[/dim #61d8ff] [{is_float}]"
-            )
-            self.update(text)
-        except Exception as e:
-            self.update(f"[dim #8eb5ac]Hyprland State: Ready ({e})[/dim #8eb5ac]")
-
-
-# ═════════════════════════════════════════════════════════════════════════════
-# HARDWARE & LAPTOP CONTROLS PANEL
-# ═════════════════════════════════════════════════════════════════════════════
-
-class LaptopControlsPanel(Static):
-    """
-    Laptop hardware controls: power profile indicators, Wi-Fi, battery, and recording state.
-    """
-
-    def on_mount(self):
-        self.update_display()
-        self.set_interval(3.0, self.update_display)
-
-    def update_display(self):
-        if not LAPTOP_AVAILABLE:
-            self.update("[dim #8eb5ac]Laptop Hardware Control: Ready[/dim #8eb5ac]")
-            return
-
-        try:
-            profile = PowerManager.get_profile()
-            is_recording = WaylandPeripherals.is_recording() if HYPR_AVAILABLE else False
-            rec_tag = "[bold #ff6b6b]🔴 RECORDING ACTIVE[/bold #ff6b6b]" if is_recording else "[dim #8eb5ac]Camera/Screen: Standby[/dim #8eb5ac]"
-
-            # Profile badges
-            p_saver = "[bold #60ffb9 on #0e3b28] 🌱 Saver [/bold #60ffb9 on #0e3b28]" if profile == "power-saver" else "[dim #8eb5ac] Saver [/dim #8eb5ac]"
-            p_bal = "[bold #61d8ff on #09202a] ⚖️ Balanced [/bold #61d8ff on #09202a]" if profile == "balanced" else "[dim #8eb5ac] Balanced [/dim #8eb5ac]"
-            p_perf = "[bold #ffc857 on #3a2e0a] ⚡ Performance [/bold #ffc857 on #3a2e0a]" if profile == "performance" else "[dim #8eb5ac] Performance [/dim #8eb5ac]"
-
-            text = (
-                f"[bold #61d8ff]◈ POWER PROFILE[/bold #61d8ff]\n"
-                f"{p_saver} {p_bal} {p_perf}\n\n"
-                f"[bold #8eb5ac]Screen Capture:[/bold #8eb5ac] {rec_tag}"
-            )
-            self.update(text)
-        except Exception as e:
-            self.update(f"[dim #8eb5ac]Hardware Control: {e}[/dim #8eb5ac]")
-
-
-# ═════════════════════════════════════════════════════════════════════════════
-# TELEMETRY & DIAGNOSTICS PANEL (LEFT)
-# ═════════════════════════════════════════════════════════════════════════════
-
-class StatsPanel(Static):
-    """Real-time Linux system telemetry matching GTK4 stat cards"""
-
-    def on_mount(self):
-        self.update_stats()
-        self.set_interval(1.5, self.update_stats)
-
-    def _meter(self, pct: float, color: str, w: int = 15) -> str:
+    def _meter(self, pct: float, color: str, width: int = 12) -> str:
         pct = max(0, min(100, pct))
-        filled = int(round(pct / 100 * w))
-        empty = w - filled
-        return f"[{color}]{'█' * filled}[/{color}][dim #143626]{'░' * empty}[/dim #143626] [bold {color}]{pct:>3.0f}%[/bold {color}]"
+        filled = int(round(pct / 100 * width))
+        empty = width - filled
+        return f"[{color}]{'■' * filled}[/{color}][dim #30363d]{'□' * empty}[/dim #30363d] [{color}]{pct:>3.0f}%[/{color}]"
 
-    def update_stats(self):
+    def refresh_all(self):
         try:
             cpu = psutil.cpu_percent(interval=None)
             mem = psutil.virtual_memory()
@@ -636,7 +535,7 @@ class StatsPanel(Static):
             bat = psutil.sensors_battery()
             now = datetime.now()
 
-            # Network throughput
+            # Net rate
             now_bytes = net.bytes_sent + net.bytes_recv
             prev = getattr(self, "_prev_net", (now_bytes, now.timestamp()))
             delta_bytes = max(0, now_bytes - prev[0])
@@ -655,48 +554,76 @@ class StatsPanel(Static):
             except Exception:
                 pass
 
-            cpu_color = "#60ffb9" if cpu < 65 else ("#ffc857" if cpu < 85 else "#ff6b6b")
-            mem_color = "#61d8ff" if mem.percent < 75 else ("#ffc857" if mem.percent < 90 else "#ff6b6b")
-            disk_color = "#b794ff" if disk.percent < 80 else "#ff6b6b"
+            cpu_col = "#2dd4bf" if cpu < 65 else ("#e3b341" if cpu < 85 else "#f85149")
+            mem_col = "#38bdf8" if mem.percent < 75 else ("#e3b341" if mem.percent < 90 else "#f85149")
+            disk_col = "#a78bfa" if disk.percent < 80 else "#f85149"
 
-            bat_str = f"{bat.percent:.0f}% {'⚡ Plugged' if bat.power_plugged else '🔋 Battery'}" if bat else "AC Line"
             bat_pct = bat.percent if bat else 100
+            bat_status = "⚡ Plugged" if (bat and bat.power_plugged) else "🔋 Battery"
 
-            # Uptime
-            boot_time = datetime.fromtimestamp(psutil.boot_time())
-            uptime = datetime.now() - boot_time
-            uptime_str = f"{int(uptime.total_seconds() // 3600)}h {int((uptime.total_seconds() % 3600) // 60)}m"
+            # Hyprland Status
+            hypr_ws_str = "Standby"
+            win_title = "Desktop"
+            win_class = ""
+            if HYPR_AVAILABLE:
+                try:
+                    active_ws = WorkspaceManager.get_active_workspace_id()
+                    workspaces = WorkspaceManager.get_all_workspaces()
+                    occupied = {w.get("id"): w.get("windows", 0) for w in workspaces}
 
-            # Top CPU process
-            top_proc = "Idle"
-            try:
-                if LAPTOP_AVAILABLE:
-                    procs = ProcessManager.get_top_cpu(1)
-                    if procs:
-                        top_proc = f"{procs[0].get('name', 'idle')} ({procs[0].get('cpu', 0):.0f}%)"
-            except Exception:
-                pass
+                    badges = []
+                    for i in range(1, 6):
+                        if i == active_ws:
+                            badges.append(f"[bold #ffffff on #238636] {i} [/bold #ffffff on #238636]")
+                        elif i in occupied:
+                            badges.append(f"[#38bdf8]●{i}[/#38bdf8]")
+                        else:
+                            badges.append(f"[dim #8b949e]{i}[/dim #8b949e]")
+                    hypr_ws_str = " ".join(badges)
+
+                    aw = WindowManager.get_active_window()
+                    if aw:
+                        win_title = aw.get("title", "Desktop")[:22]
+                        win_class = aw.get("class", "")[:12]
+                except Exception:
+                    pass
+
+            # Power Profile
+            power_prof = "balanced"
+            if LAPTOP_AVAILABLE:
+                try:
+                    raw_prof = PowerManager.get_power_profile()
+                    if "power-saver" in raw_prof or "powersave" in raw_prof:
+                        power_prof = "power-saver"
+                    elif "performance" in raw_prof:
+                        power_prof = "performance"
+                    else:
+                        power_prof = "balanced"
+                except Exception:
+                    pass
+
+            p_saver = "[#2dd4bf]Saver[/]" if power_prof == "power-saver" else "[dim]Saver[/]"
+            p_bal = "[#38bdf8]Balanced[/]" if power_prof == "balanced" else "[dim]Bal[/]"
+            p_perf = "[#e3b341]Perf[/]" if power_prof == "performance" else "[dim]Perf[/]"
 
             text = (
-                f"[bold #61d8ff]🕒 {now.strftime('%H:%M:%S')}[/bold #61d8ff]  [dim #8eb5ac]{now.strftime('%b %d')}[/dim #8eb5ac]\n"
-                f"[dim #143626]{'━' * 23}[/dim #143626]\n"
-                f"[bold #8eb5ac]🌐 NET I/O[/bold #8eb5ac] [bold #b794ff]{kbps:>5.1f} KB/s[/bold #b794ff]\n"
-                f"{self._meter(min(kbps / 400 * 100, 100), '#b794ff')}\n"
-                f"[bold #8eb5ac]⚡ CPU LOAD[/bold #8eb5ac] [{cpu_color}]{cpu:>3.0f}%{temp_str}[/{cpu_color}]\n"
-                f"{self._meter(cpu, cpu_color)}\n"
-                f"[bold #8eb5ac]💾 MEMORY[/bold #8eb5ac] [{mem_color}]{mem.used / 1e9:.1f}/{mem.total / 1e9:.1f}GB[/{mem_color}]\n"
-                f"{self._meter(mem.percent, mem_color)}\n"
-                f"[bold #8eb5ac]📁 ROOT DISK[/bold #8eb5ac] [{disk_color}]{disk.used / 1e9:.0f}/{disk.total / 1e9:.0f}GB[/{disk_color}]\n"
-                f"{self._meter(disk.percent, disk_color)}\n"
-                f"[bold #8eb5ac]🔋 POWER[/bold #8eb5ac] [green]{bat_str}[/green]\n"
-                f"{self._meter(bat_pct, '#60ffb9')}\n"
-                f"[dim #143626]{'━' * 23}[/dim #143626]\n"
-                f"[dim #8eb5ac]Top Proc: [/dim #8eb5ac][bold white]{top_proc}[/bold white]\n"
-                f"[dim #8eb5ac]Arch Linux + Hyprland (UP: {uptime_str})[/dim #8eb5ac]\n"
+                f"[bold #e6edf3]SYSTEM TELEMETRY[/bold #e6edf3]\n"
+                f"[dim]CPU[/dim]  {self._meter(cpu, cpu_col)}{temp_str}\n"
+                f"[dim]RAM[/dim]  {self._meter(mem.percent, mem_col)} [dim]{mem.used/1e9:.1f}G[/dim]\n"
+                f"[dim]DSK[/dim]  {self._meter(disk.percent, disk_col)}\n"
+                f"[dim]NET[/dim]  [#a78bfa]{kbps:>5.1f} KB/s[/]\n"
+                f"[dim]BAT[/dim]  {self._meter(bat_pct, '#2dd4bf')} [dim]{bat_status}[/dim]\n"
+                f"\n"
+                f"[bold #e6edf3]HYPRLAND DESKTOP[/bold #e6edf3]\n"
+                f"Workspaces: {hypr_ws_str}\n"
+                f"Window: [bold white]{win_title}[/bold white] [dim]({win_class})[/dim]\n"
+                f"\n"
+                f"[bold #e6edf3]POWER PROFILE[/bold #e6edf3]\n"
+                f"{p_saver} · {p_bal} · {p_perf}\n"
             )
             self.update(text)
         except Exception as e:
-            self.update(f"[red]Telemetry error: {e}[/red]")
+            self.update(f"[red]Sidebar update: {e}[/red]")
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -704,229 +631,161 @@ class StatsPanel(Static):
 # ═════════════════════════════════════════════════════════════════════════════
 
 class BenXTUI(App):
-    """Full-featured GTK4-parity Textual UI for BenX AI Assistant"""
-    TITLE = "BenX AI Assistant v2.0 (Terminal Console)"
+    """Clean, modern minimalist BenX Terminal Assistant"""
+    TITLE = "BenX Assistant v2.0"
 
     CSS = """
     Screen {
-        background: #020406;
-        color: #eafaf1;
+        background: #0d1117;
+        color: #c9d1d9;
     }
 
-    /* ── Header Top Bar ── */
-    #topbar {
+    /* ── Top Header ── */
+    #header-bar {
         height: 3;
-        background: #040d12;
-        border-bottom: solid #143626;
-        padding: 0 1;
+        background: #161b22;
+        border-bottom: solid #21262d;
+        padding: 0 2;
         align: left middle;
     }
-    #top-pill {
-        color: #60ffb9;
+    #logo-title {
+        color: #38bdf8;
         text-style: bold;
         margin-right: 1;
     }
-    #top-title {
-        color: #f4fff9;
-        text-style: bold;
+    #status-pill {
+        color: #2dd4bf;
+        margin-right: 2;
+    }
+    #top-model-display {
+        color: #a78bfa;
         width: 1fr;
     }
-    #top-waveform {
-        width: 38;
+    TUIWaveformWidget {
+        width: 28;
         content-align: right middle;
-        margin-right: 1;
+        margin-right: 2;
     }
-    #top-btn-settings {
-        background: #09202a;
-        border: solid #61d8ff;
-        color: #61d8ff;
-        margin-right: 1;
+    #btn-settings-top {
+        background: #21262d;
+        color: #c9d1d9;
+        border: none;
         height: 3;
+        padding: 0 1;
     }
-    #top-btn-settings:hover {
-        background: #143626;
-        border: solid #60ffb9;
-        color: #60ffb9;
+    #btn-settings-top:hover {
+        background: #30363d;
+        color: #ffffff;
     }
 
-    /* ── Main Grid ── */
-    #main-grid {
+    /* ── Main Layout ── */
+    #body-container {
         height: 1fr;
     }
 
-    #left-panel {
-        width: 27;
-        border-right: solid #143626;
-        background: #03080d;
-        padding: 0 1;
+    /* ── Sidebar (Left) ── */
+    #sidebar {
+        width: 32;
+        background: #11161d;
+        border-right: solid #21262d;
+        padding: 1 1;
+    }
+    SidebarPanel {
+        height: auto;
+        margin-bottom: 1;
     }
 
-    #center-panel {
+    .side-btn-row {
+        height: 3;
+        margin-bottom: 1;
+    }
+    .side-btn {
+        min-width: 7;
+        background: #161b22;
+        color: #8b949e;
+        border: none;
+        margin-right: 1;
+        padding: 0 1;
+    }
+    .side-btn:hover {
+        background: #21262d;
+        color: #38bdf8;
+    }
+
+    /* ── Chat Container (Right/Center) ── */
+    #main-chat-area {
         width: 1fr;
-        border-right: solid #143626;
-        background: #03070b;
-        padding: 0 1;
+        background: #0d1117;
+        padding: 1 2;
     }
 
-    #right-panel {
-        width: 50;
-        background: #04090e;
-        padding: 0 1;
-    }
-
-    .panel-title {
-        color: #60ffb9;
-        text-style: bold;
-        margin-top: 1;
-        margin-bottom: 0;
-    }
-    .panel-sub {
-        color: #8eb5ac;
-        text-style: dim;
-        margin-bottom: 1;
-    }
-
-    /* ── Center Content: Hyprland & Mission Stream ── */
-    HyprlandBar {
-        height: 4;
-        border: solid #143626;
-        background: #020509;
-        padding: 0 1;
-        margin-top: 1;
-        margin-bottom: 1;
-    }
-
-    #win-controls-row {
-        height: 3;
-        margin-bottom: 1;
-    }
-    .win-btn {
-        min-width: 6;
-        background: #040d12;
-        border: solid #143626;
-        color: #61d8ff;
-        margin-right: 1;
-        padding: 0 1;
-    }
-    .win-btn:hover {
-        background: #0c2b1e;
-        border: solid #60ffb9;
-        color: #60ffb9;
-    }
-
-    #activity-stream {
+    #chat-log {
         height: 1fr;
-        border: solid #143626;
-        background: #010305;
-        padding: 0 1;
+        background: #0d1117;
+        border: round #21262d;
+        padding: 1 1;
     }
 
-    /* ── Left Content: Telemetry & Laptop Controls ── */
-    LaptopControlsPanel {
-        height: 6;
-        border: solid #143626;
-        background: #020509;
-        padding: 0 1;
+    /* Quick Action Chips */
+    #quick-chips-bar {
+        height: 3;
         margin-top: 1;
-        margin-bottom: 1;
     }
-
-    #hardware-buttons-row-1 {
-        height: 3;
-        margin-bottom: 1;
-    }
-    #hardware-buttons-row-2 {
-        height: 3;
-        margin-bottom: 1;
-    }
-    .hw-btn {
-        min-width: 5;
-        background: #040d12;
-        border: solid #143626;
-        color: #8eb5ac;
+    .chip-btn {
+        background: #161b22;
+        color: #8b949e;
+        border: none;
         margin-right: 1;
         padding: 0 1;
     }
-    .hw-btn:hover {
-        background: #0c2b1e;
-        border: solid #60ffb9;
-        color: #60ffb9;
+    .chip-btn:hover {
+        background: #21262d;
+        color: #2dd4bf;
     }
 
-    /* ── Right Panel: Chat & Automation ── */
-    #controls-bar {
+    /* Input Composer */
+    #composer-bar {
         height: 3;
         margin-top: 1;
-        margin-bottom: 1;
-        align: left middle;
     }
-    #model-select {
-        width: 30;
-        background: #030a0f;
-        border: solid #143626;
-        color: #60ffb9;
+    #btn-screen-attach {
+        width: 4;
+        background: #21262d;
+        color: #38bdf8;
+        border: none;
+        margin-right: 1;
     }
-    #agent-switch {
+    #btn-screen-attach:hover {
+        background: #30363d;
+    }
+    #chat-input-box {
+        width: 1fr;
+        background: #161b22;
+        border: round #30363d;
+        color: #f0f6fc;
+        padding: 0 1;
+    }
+    #chat-input-box:focus {
+        border: round #38bdf8;
+    }
+    #btn-chat-send {
         width: 6;
+        background: #238636;
+        color: #ffffff;
+        border: none;
         margin-left: 1;
     }
-
-    #chat-window {
-        height: 1fr;
-        border: solid #143626;
-        background: #010305;
-        padding: 0 1;
+    #btn-chat-send:hover {
+        background: #2ea043;
     }
 
-    #chips-container {
-        height: 3;
-        margin-top: 1;
-    }
-    .quick-chip {
-        min-width: 8;
-        background: #040d12;
-        border: solid #143626;
-        color: #8eb5ac;
-        margin-right: 1;
-        padding: 0 1;
-    }
-    .quick-chip:hover {
-        background: #0c2b1e;
-        border: solid #60ffb9;
-        color: #60ffb9;
-    }
-
-    #composer-row {
-        height: 3;
-        margin-top: 1;
-    }
-    #attach-btn {
-        width: 4;
-        background: #040d12;
-        border: solid #143626;
-        color: #61d8ff;
-    }
-    #chat-input {
-        width: 1fr;
-        background: #03080d;
-        border: solid #143626;
-        color: #eafaf1;
-    }
-    #chat-input:focus {
-        border: solid #60ffb9;
-    }
-    #send-btn {
-        width: 5;
-        background: #0e3b28;
-        border: solid #60ffb9;
-        color: #60ffb9;
-    }
-
-    #status-footer {
+    /* ── Bottom Status Bar ── */
+    #footer-status-bar {
         height: 1;
-        background: #04120c;
-        color: #60ffb9;
-        padding: 0 1;
+        background: #161b22;
+        border-top: solid #21262d;
+        color: #8b949e;
+        padding: 0 2;
     }
     """
 
@@ -939,7 +798,6 @@ class BenXTUI(App):
         Binding("f4",     "take_screen",  "Screenshot"),
         Binding("f5",     "refresh_state","Refresh"),
         Binding("f6",     "open_settings","Settings"),
-        Binding("f7",     "toggle_record","Screen Rec"),
         Binding("f8",     "lock_screen",  "Lock"),
     ]
 
@@ -955,246 +813,194 @@ class BenXTUI(App):
             from jarvis_ai.ai_engine import AIEngine
             self.ai_engine = AIEngine()
             try:
-                self.call_from_thread(self._log_mission, "✅ AI Engine & OpenRouter stack online")
+                self.call_from_thread(self._log, "AI Engine ready.")
             except RuntimeError:
                 pass
         except Exception as e:
             try:
-                self.call_from_thread(self._log_mission, f"⚠️ Engine init: {e}")
+                self.call_from_thread(self._log, f"Engine note: {e}")
             except RuntimeError:
                 pass
 
     def compose(self) -> ComposeResult:
-        # Top Header Bar
-        with Horizontal(id="topbar"):
-            yield Label("● BENX", id="top-pill")
-            yield Label("Adaptive Linux Control & Automation Platform", id="top-title")
-            yield TUIWaveformWidget(id="top-waveform")
-            yield Button("⚙️ Settings (F6)", id="top-btn-settings")
+        # Header Top Bar
+        with Horizontal(id="header-bar"):
+            yield Label("BenX", id="logo-title")
+            yield Label("● Online", id="status-pill")
+            yield Label("[Auto Router]", id="top-model-display")
+            yield TUIWaveformWidget(id="header-waveform")
+            yield Button("⚙️ Settings (F6)", id="btn-settings-top")
 
-        with Horizontal(id="main-grid"):
-            # ── LEFT: Telemetry & Hardware Control ────────────────────────────
-            with Vertical(id="left-panel"):
-                yield Label("◈ TELEMETRY", classes="panel-title")
-                yield StatsPanel()
+        with Horizontal(id="body-container"):
+            # ── Sidebar (Left) ────────────────────────────────────────────────
+            with Vertical(id="sidebar"):
+                yield SidebarPanel(id="sidebar-panel")
 
-                yield Label("◈ HARDWARE", classes="panel-title")
-                yield LaptopControlsPanel()
+                # Clean Desktop Controls
+                yield Label("[bold #e6edf3]WINDOW ACTIONS[/bold #e6edf3]")
+                with Horizontal(classes="side-btn-row"):
+                    yield Button("🪟 Float", id="act-float", classes="side-btn")
+                    yield Button("📌 Pin", id="act-pin", classes="side-btn")
+                    yield Button("🔲 Full", id="act-full", classes="side-btn")
+                with Horizontal(classes="side-btn-row"):
+                    yield Button("◀ Move", id="act-move-l", classes="side-btn")
+                    yield Button("Move ▶", id="act-move-r", classes="side-btn")
+                    yield Button("✕ Close", id="act-close", classes="side-btn")
 
-                # Power Profiles & Hardware Quick Actions
-                with Horizontal(id="hardware-buttons-row-1"):
-                    yield Button("🌱 Saver", id="btn-prof-saver", classes="hw-btn")
-                    yield Button("⚖️ Bal", id="btn-prof-bal", classes="hw-btn")
-                    yield Button("⚡ Perf", id="btn-prof-perf", classes="hw-btn")
-                    yield Button("🔒 Lock", id="btn-lock", classes="hw-btn")
+                # Hardware Controls
+                yield Label("[bold #e6edf3]HARDWARE ACTIONS[/bold #e6edf3]")
+                with Horizontal(classes="side-btn-row"):
+                    yield Button("🌱 Saver", id="act-saver", classes="side-btn")
+                    yield Button("⚖️ Bal", id="act-bal", classes="side-btn")
+                    yield Button("⚡ Perf", id="act-perf", classes="side-btn")
+                with Horizontal(classes="side-btn-row"):
+                    yield Button("🔒 Lock", id="act-lock", classes="side-btn")
+                    yield Button("📋 Clip", id="act-clip", classes="side-btn")
+                    yield Button("🛑 Off", id="act-off", classes="side-btn")
 
-                with Horizontal(id="hardware-buttons-row-2"):
-                    yield Button("💤 Sleep", id="btn-sleep", classes="hw-btn")
-                    yield Button("📋 Clip", id="btn-clip", classes="hw-btn")
-                    yield Button("🔄 Boot", id="btn-reboot", classes="hw-btn")
-                    yield Button("🛑 Off", id="btn-poweroff", classes="hw-btn")
+            # ── Main Conversation Node (Right) ────────────────────────────────
+            with Vertical(id="main-chat-area"):
+                yield RichLog(id="chat-log", highlight=True, markup=True)
 
-            # ── CENTER: Hyprland & Mission Stream ─────────────────────────────
-            with Vertical(id="center-panel"):
-                yield HyprlandBar(id="hypr-bar")
+                # Quick Action Chips
+                with Horizontal(id="quick-chips-bar"):
+                    for idx, (lbl, _) in enumerate(QUICK_ACTIONS[:5]):
+                        yield Button(lbl, classes="chip-btn", id=f"chip-{idx}")
 
-                # Window action buttons matching GTK4 WindowControls
-                with Horizontal(id="win-controls-row"):
-                    yield Button("🪟 Float", id="btn-win-float", classes="win-btn")
-                    yield Button("📌 Pin", id="btn-win-pin", classes="win-btn")
-                    yield Button("🔲 Full", id="btn-win-full", classes="win-btn")
-                    yield Button("◀ Move", id="btn-win-move-l", classes="win-btn")
-                    yield Button("Move ▶", id="btn-win-move-r", classes="win-btn")
-                    yield Button("📑 Group", id="btn-win-group", classes="win-btn")
-                    yield Button("💾 Save WS", id="btn-ws-save", classes="win-btn")
-                    yield Button("✕ Close", id="btn-win-close", classes="win-btn")
+                # Composer
+                with Horizontal(id="composer-bar"):
+                    yield Button("📷", id="btn-screen-attach", tooltip="Attach screenshot")
+                    yield Input(placeholder="Ask BenX or type an automation command (e.g. /help)...", id="chat-input-box")
+                    yield Button("Send", id="btn-chat-send")
 
-                yield Label("◈ MISSION PIPELINE & DISPATCH LOG", classes="panel-title")
-                yield Label("Real-time desktop events, agent steps & execution telemetry", classes="panel-sub")
-                yield RichLog(id="activity-stream", highlight=True, markup=True)
-
-            # ── RIGHT: Assistant Chat Node ────────────────────────────────────
-            with Vertical(id="right-panel"):
-                yield Label("◈ ASSISTANT NODE", classes="panel-title")
-
-                with Horizontal(id="controls-bar"):
-                    yield Select([(m, m) for m in MODELS], value=MODELS[0], id="model-select")
-                    yield Label("Agent:", id="agent-label")
-                    yield Switch(value=False, id="agent-switch")
-
-                yield RichLog(id="chat-window", highlight=True, markup=True)
-
-                # Quick Automation Chips
-                with Horizontal(id="chips-container"):
-                    for idx, (lbl, _) in enumerate(QUICK_ACTIONS[:4]):
-                        yield Button(lbl, classes="quick-chip", id=f"chip-{idx}")
-
-                # Composer Row
-                with Horizontal(id="composer-row"):
-                    yield Button("+", id="attach-btn", tooltip="Attach screenshot")
-                    yield Input(placeholder="Ask BenX or type an automation command...", id="chat-input")
-                    yield Button("➤", id="send-btn")
-
-        # Footer
+        # Footer Status Line
         yield Label(
-            "● BenX Ready  │  F1 Help  │  F2 Agent  │  F3 Voice  │  F4 Screen  │  F6 Settings  │  F7 Rec  │  F8 Lock  │  Ctrl+C Quit",
-            id="status-footer"
+            "● Ready  │  Enter: Send  │  F1: Help  │  F2: Agent  │  F3: Voice  │  F4: Screenshot  │  F6: Settings  │  Ctrl+C: Quit",
+            id="footer-status-bar"
         )
-        yield Footer()
 
     def on_mount(self):
-        chat = self.query_one("#chat-window", RichLog)
-        ts = datetime.now().strftime("%H:%M:%S")
+        chat = self.query_one("#chat-log", RichLog)
+        ts = datetime.now().strftime("%H:%M")
         chat.write(
-            f"[dim #8eb5ac][{ts}][/dim #8eb5ac] [bold #60ffb9]BenX Assistant v2.0 Online (TUI)[/bold #60ffb9]\n"
-            f"[dim white]Arch Linux + Hyprland (Wayland) native control stack ready.[/dim white]\n"
-            f"[dim #61d8ff]⚡ Features: Full Hyprland window/workspace manager, laptop power profiles, live telemetry, clipboard history & ReAct agent.[/dim #61d8ff]\n"
+            f"[dim #8b949e]{ts}[/dim #8b949e] [bold #38bdf8]BenX Assistant v2.0[/bold #38bdf8]\n"
+            f"[dim #c9d1d9]Welcome to BenX. Running natively on Arch Linux + Hyprland (Wayland).\n"
+            f"You can control windows, automate apps, manage power, or chat naturally with AI.[/dim #c9d1d9]\n"
         )
-        self._log_mission("BenX TUI mounted with full GTK4 parity.")
-        self.query_one("#chat-input", Input).focus()
+        self.query_one("#chat-input-box", Input).focus()
         threading.Thread(target=self._init_ai_engine, daemon=True).start()
 
-    # ── Button Pressed Handlers ───────────────────────────────────────────────
+    # ── Button Handlers ───────────────────────────────────────────────────────
 
     def on_button_pressed(self, event: Button.Pressed):
         bid = event.button.id
         if not bid:
             return
 
-        # Top Bar
-        if bid == "top-btn-settings":
+        if bid == "btn-settings-top":
             self.action_open_settings()
-
-        # Chat & Composer
-        elif bid == "send-btn":
-            inp = self.query_one("#chat-input", Input)
+        elif bid == "btn-chat-send":
+            inp = self.query_one("#chat-input-box", Input)
             val = inp.value.strip()
             inp.value = ""
             if val:
                 self.send_user_message(val)
-        elif bid == "attach-btn":
+        elif bid == "btn-screen-attach":
             self.action_take_screen()
         elif bid.startswith("chip-"):
             try:
                 idx = int(bid.replace("chip-", ""))
                 _, cmd = QUICK_ACTIONS[idx]
-                inp = self.query_one("#chat-input", Input)
+                inp = self.query_one("#chat-input-box", Input)
                 inp.value = cmd
                 inp.focus()
             except Exception:
                 pass
 
-        # Power Profile Buttons
-        elif bid == "btn-prof-saver":
-            self.set_power_profile("power-saver")
-        elif bid == "btn-prof-bal":
-            self.set_power_profile("balanced")
-        elif bid == "btn-prof-perf":
-            self.set_power_profile("performance")
-
-        # Hardware Buttons
-        elif bid == "btn-lock":
-            self.action_lock_screen()
-        elif bid == "btn-sleep":
-            self.confirm_and_run("Suspend System?", "Put laptop into sleep/suspend mode?", lambda: PowerManager.suspend() if LAPTOP_AVAILABLE else None)
-        elif bid == "btn-clip":
-            self.push_screen(ClipboardModal())
-        elif bid == "btn-reboot":
-            self.confirm_and_run("Reboot System?", "Are you sure you want to reboot the laptop now?", lambda: PowerManager.reboot() if LAPTOP_AVAILABLE else None)
-        elif bid == "btn-poweroff":
-            self.confirm_and_run("Shutdown System?", "Are you sure you want to completely power off?", lambda: PowerManager.shutdown() if LAPTOP_AVAILABLE else None)
-
-        # Hyprland Window Controls
-        elif bid == "btn-win-float":
+        # Window Actions
+        elif bid == "act-float":
             if HYPR_AVAILABLE:
                 WindowManager.toggle_floating()
-                self._log_mission("🪟 Toggled active window floating state")
+                self._log("Toggled active window float.")
                 self.action_refresh_state()
-        elif bid == "btn-win-pin":
+        elif bid == "act-pin":
             if HYPR_AVAILABLE:
                 WindowManager.toggle_pin()
-                self._log_mission("📌 Toggled active window pin")
+                self._log("Toggled active window pin.")
                 self.action_refresh_state()
-        elif bid == "btn-win-full":
+        elif bid == "act-full":
             if HYPR_AVAILABLE:
                 WindowManager.fullscreen()
-                self._log_mission("🔲 Toggled fullscreen")
+                self._log("Toggled fullscreen.")
                 self.action_refresh_state()
-        elif bid == "btn-win-move-l":
+        elif bid == "act-move-l":
             if HYPR_AVAILABLE:
                 WindowManager.move_active("l")
-                self._log_mission("◀ Moved active window left")
-        elif bid == "btn-win-move-r":
+                self._log("Moved active window left.")
+        elif bid == "act-move-r":
             if HYPR_AVAILABLE:
                 WindowManager.move_active("r")
-                self._log_mission("▶ Moved active window right")
-        elif bid == "btn-win-group":
-            if HYPR_AVAILABLE:
-                WindowManager.toggle_group()
-                self._log_mission("📑 Toggled tab group on active window")
-        elif bid == "btn-ws-save":
-            if HYPR_AVAILABLE:
-                res = WorkspaceManager.save_layout("default_tui")
-                self._log_mission(f"💾 Workspace layout saved: {res}")
-        elif bid == "btn-win-close":
+                self._log("Moved active window right.")
+        elif bid == "act-close":
             if HYPR_AVAILABLE:
                 WindowManager.close_active()
-                self._log_mission("✕ Closed active window")
+                self._log("Closed active window.")
                 self.action_refresh_state()
+
+        # Power & Hardware Actions
+        elif bid == "act-saver":
+            self.set_power_profile("power-saver")
+        elif bid == "act-bal":
+            self.set_power_profile("balanced")
+        elif bid == "act-perf":
+            self.set_power_profile("performance")
+        elif bid == "act-lock":
+            self.action_lock_screen()
+        elif bid == "act-clip":
+            self.push_screen(ClipboardModal())
+        elif bid == "act-off":
+            self.confirm_and_run(
+                "Shutdown System?",
+                "Are you sure you want to turn off the computer?",
+                lambda: PowerManager.shutdown() if LAPTOP_AVAILABLE else None
+            )
 
     def set_power_profile(self, profile: str):
         if LAPTOP_AVAILABLE:
-            res = PowerManager.set_profile(profile)
-            self._log_mission(f"🔋 Power Profile set to '{profile}': {res}")
+            res = PowerManager.set_power_profile(profile)
+            self._log(f"Power profile: {res}")
             self.action_refresh_state()
 
     def confirm_and_run(self, title: str, message: str, action_func):
         def on_result(confirmed: bool):
             if confirmed:
-                self._log_mission(f"⚠️ Executing confirmed operation: {title}")
+                self._log(f"Executing: {title}")
                 try:
                     action_func()
                 except Exception as e:
-                    self._log_mission(f"❌ Error during operation: {e}")
-            else:
-                self._log_mission("Operation canceled by user.")
+                    self._log(f"Error: {e}")
 
         self.push_screen(TUIConfirmModal(title, message), on_result)
 
-    # ── Switch & Select Handlers ──────────────────────────────────────────────
-
-    def on_switch_changed(self, event: Switch.Changed):
-        if event.switch.id == "agent-switch":
-            self.agent_mode = event.value
-            status = "AUTONOMOUS RE-ACT AGENT" if event.value else "INSTANT COMMAND ROUTER"
-            self._log_mission(f"Agent mode switched: [bold #60ffb9]{status}[/bold #60ffb9]")
-            self._set_status_bar(f"Mode: {status}")
-
-    def on_select_changed(self, event: Select.Changed):
-        if event.select.id == "model-select":
-            val = str(event.value)
-            self._log_mission(f"Selected AI model: {val}")
-
     def on_input_submitted(self, event: Input.Submitted):
-        if event.input.id == "chat-input":
+        if event.input.id == "chat-input-box":
             val = event.value.strip()
             event.input.value = ""
             if val:
                 self.send_user_message(val)
 
-    # ── User Message Execution ────────────────────────────────────────────────
+    # ── Message Processing ────────────────────────────────────────────────────
 
     def send_user_message(self, text: str):
         if not text and not self.pending_image:
             return
 
-        chat = self.query_one("#chat-window", RichLog)
-        ts = datetime.now().strftime("%H:%M:%S")
-        img_badge = f" [bold #61d8ff][📎 {os.path.basename(self.pending_image)}][/bold #61d8ff]" if self.pending_image else ""
-        chat.write(f"\n[dim #8eb5ac][{ts}][/dim #8eb5ac] [bold cyan]👤 You:[/bold cyan] {text}{img_badge}")
+        chat = self.query_one("#chat-log", RichLog)
+        ts = datetime.now().strftime("%H:%M")
+        img_badge = f" [bold #38bdf8][📷 {os.path.basename(self.pending_image)}][/bold #38bdf8]" if self.pending_image else ""
+        chat.write(f"\n[dim #8b949e]{ts}[/dim #8b949e] [bold #38bdf8]You:[/bold #38bdf8] {text}{img_badge}")
 
-        self._log_mission(f"User command: {text[:60]}")
-        self._set_status_bar("⏳ BenX is processing...")
+        self._set_status("BenX is thinking...")
         self.set_waveform_state("thinking")
 
         self.execute_task_worker(text, self.pending_image)
@@ -1202,80 +1008,69 @@ class BenXTUI(App):
 
     @work(thread=True)
     def execute_task_worker(self, text: str, image_path: Optional[str] = None):
-        chat = self.query_one("#chat-window", RichLog)
+        chat = self.query_one("#chat-log", RichLog)
         try:
             if not self.ai_engine:
                 from jarvis_ai.ai_engine import AIEngine
                 self.ai_engine = AIEngine()
 
-            sel = self.query_one("#model-select", Select)
-            selected_model = None if sel.value == "Auto (Best)" else sel.value
-
             def on_agent_step(step_text: str):
-                self.app.call_from_thread(self._log_mission, f"[bold #b794ff]Step:[/bold #b794ff] {step_text[:75]}")
+                self.app.call_from_thread(self._log, f"Step: {step_text[:65]}")
 
             if image_path:
-                self.app.call_from_thread(self._log_mission, f"Vision OCR analysis: {image_path}")
-                response = self.ai_engine.chat(text, image_path=image_path, model=selected_model)
+                response = self.ai_engine.chat(text, image_path=image_path)
             elif self.agent_mode:
-                self.app.call_from_thread(self._log_mission, "Engaging multi-step ReAct agent...")
-                response = self.ai_engine.agent_run(text, on_step_cb=on_agent_step, model=selected_model)
+                response = self.ai_engine.agent_run(text, on_step_cb=on_agent_step)
                 if not response:
-                    response = self.ai_engine.chat(text, model=selected_model)
+                    response = self.ai_engine.chat(text)
             else:
                 from jarvis_ai.executor import CommandExecutor
                 cmd_json = self.ai_engine.interpret_command(
                     text,
                     conversation_context=self.ai_engine.conversation_history,
                     learning_engine=self.ai_engine.learning_engine,
-                    model=selected_model,
                 )
-                self.app.call_from_thread(self._log_mission, f"Command: {cmd_json[:50]}")
                 response = CommandExecutor.execute(cmd_json, self.ai_engine, text)
                 if response is None:
-                    response = self.ai_engine.chat(text, model=selected_model)
+                    response = self.ai_engine.chat(text)
 
-            ts = datetime.now().strftime("%H:%M:%S")
+            ts = datetime.now().strftime("%H:%M")
             self.app.call_from_thread(
                 chat.write,
-                f"[dim #8eb5ac][{ts}][/dim #8eb5ac] [bold #60ffb9]🤖 BenX:[/bold #60ffb9]\n{response}\n"
+                f"[dim #8b949e]{ts}[/dim #8b949e] [bold #2dd4bf]BenX:[/bold #2dd4bf]\n{response}\n"
             )
-            self.app.call_from_thread(self._log_mission, f"✅ Task finished: {str(response)[:50]}")
-            self.app.call_from_thread(self._set_status_bar, "✓ BenX Ready")
+            self.app.call_from_thread(self._set_status, "Ready")
             self.app.call_from_thread(self.set_waveform_state, "idle")
+            self.app.call_from_thread(self.action_refresh_state)
         except Exception as err:
-            ts = datetime.now().strftime("%H:%M:%S")
-            self.app.call_from_thread(chat.write, f"[dim #8eb5ac][{ts}][/dim #8eb5ac] [bold red]❌ Error:[/bold red] {err}")
-            self.app.call_from_thread(self._log_mission, f"❌ Execution error: {err}")
-            self.app.call_from_thread(self._set_status_bar, "✗ Error encountered")
+            ts = datetime.now().strftime("%H:%M")
+            self.app.call_from_thread(chat.write, f"[dim #8b949e]{ts}[/dim #8b949e] [bold #f85149]Error:[/bold #f85149] {err}")
+            self.app.call_from_thread(self._set_status, "Error")
             self.app.call_from_thread(self.set_waveform_state, "idle")
 
-    # ── Hotkeys & Actions ─────────────────────────────────────────────────────
+    # ── Actions & Hotkeys ─────────────────────────────────────────────────────
 
     def action_clear_chat(self):
-        self.query_one("#chat-window", RichLog).clear()
-        self._log_mission("Chat log cleared.")
-        self._set_status_bar("Chat window cleared")
+        self.query_one("#chat-log", RichLog).clear()
+        self._set_status("Chat cleared")
 
     def action_toggle_agent(self):
-        sw = self.query_one("#agent-switch", Switch)
-        sw.value = not sw.value
+        self.agent_mode = not self.agent_mode
+        state_str = "Agent: ON" if self.agent_mode else "Agent: OFF"
+        self._log(f"Mode changed: {state_str}")
+        self._set_status(state_str)
 
     def action_open_settings(self):
         self.push_screen(TUISettingsModal())
 
     def action_refresh_state(self):
         try:
-            hb = self.query_one("#hypr-bar", HyprlandBar)
-            hb.update_hypr_state()
-            lp = self.query_one("LaptopControlsPanel", LaptopControlsPanel)
-            lp.update_display()
-            self._log_mission("Desktop & hardware state refreshed.")
+            sp = self.query_one("#sidebar-panel", SidebarPanel)
+            sp.refresh_all()
         except Exception:
             pass
 
     def action_take_screen(self):
-        """Take screenshot and prime for vision analysis"""
         try:
             if HYPR_AVAILABLE:
                 path = WaylandPeripherals.take_screenshot(select_region=False)
@@ -1285,38 +1080,21 @@ class BenXTUI(App):
 
             if path and os.path.exists(path):
                 self.pending_image = path
-                self._log_mission(f"📸 Screenshot attached: {path}")
-                inp = self.query_one("#chat-input", Input)
+                inp = self.query_one("#chat-input-box", Input)
                 inp.value = "analyze this screenshot"
                 inp.focus()
-                self._set_status_bar(f"Screenshot ready: {os.path.basename(path)}")
-            else:
-                self._log_mission(f"Screenshot taken: {path}")
+                self._set_status(f"Screenshot attached: {os.path.basename(path)}")
         except Exception as e:
-            self._log_mission(f"Screenshot error: {e}")
-
-    def action_toggle_record(self):
-        if not HYPR_AVAILABLE:
-            self._log_mission("Screen recording not supported without Hyprland peripherals.")
-            return
-
-        if WaylandPeripherals.is_recording():
-            path = WaylandPeripherals.stop_screen_recording()
-            self._log_mission(f"🎥 Screen recording stopped and saved to: {path}")
-        else:
-            success, msg = WaylandPeripherals.start_screen_recording()
-            self._log_mission(f"🎥 Screen recording started: {msg}")
-        self.action_refresh_state()
+            self._log(f"Screenshot error: {e}")
 
     def action_lock_screen(self):
         if LAPTOP_AVAILABLE:
             PowerManager.lock()
-            self._log_mission("🔒 Hyprlock engaged")
+            self._log("Screen locked.")
 
     def action_voice_input(self):
-        self._set_status_bar("🎤 Listening for voice...")
+        self._set_status("Listening...")
         self.set_waveform_state("listening")
-        self._log_mission("🎤 Voice input active")
         self.listen_voice_worker()
 
     @work(thread=True)
@@ -1326,67 +1104,50 @@ class BenXTUI(App):
             vh = VoiceHandler()
             text = vh.listen()
             if text:
-                self.app.call_from_thread(self._log_mission, f"🎤 Transcribed: '{text}'")
                 self.app.call_from_thread(self.send_user_message, text)
             else:
-                self.app.call_from_thread(self._set_status_bar, "🎤 No speech detected")
+                self.app.call_from_thread(self._set_status, "No voice input detected")
                 self.app.call_from_thread(self.set_waveform_state, "idle")
         except Exception as exc:
-            self.app.call_from_thread(self._set_status_bar, f"🎤 Voice error: {exc}")
+            self.app.call_from_thread(self._set_status, f"Voice error: {exc}")
             self.app.call_from_thread(self.set_waveform_state, "idle")
 
     def action_show_help(self):
-        chat = self.query_one("#chat-window", RichLog)
+        chat = self.query_one("#chat-log", RichLog)
         chat.write(
-            "\n[bold #60ffb9]══════════════════ BENX TERMINAL CONSOLE GUIDE ══════════════════[/bold #60ffb9]\n"
-            "[bold #61d8ff]Function Hotkeys:[/bold #61d8ff]\n"
-            "  [white]F1[/white]        Show this help guide\n"
-            "  [white]F2[/white]        Toggle Autonomous ReAct Agent (ON/OFF)\n"
-            "  [white]F3[/white]        Trigger Voice Input (Speech-to-Text)\n"
-            "  [white]F4[/white]        Capture Desktop Screenshot & Prime for Vision OCR\n"
-            "  [white]F5[/white]        Refresh Hyprland Workspaces & Hardware State\n"
-            "  [white]F6[/white]        Open Settings Dialog (Models, API Keys, Autostart)\n"
-            "  [white]F7[/white]        Toggle Screen Recording (wf-recorder)\n"
-            "  [white]F8[/white]        Engage Screen Lock (hyprlock)\n"
-            "  [white]Ctrl+L[/white]    Clear current chat log\n"
-            "  [white]Ctrl+C[/white]    Quit BenX TUI\n\n"
-            "[bold #61d8ff]Hyprland Controls (Center Bar Buttons):[/bold #61d8ff]\n"
-            "  [cyan]Float[/cyan]       Toggle active window floating\n"
-            "  [cyan]Pin[/cyan]         Pin active window across workspaces\n"
-            "  [cyan]Full[/cyan]        Toggle active window fullscreen\n"
-            "  [cyan]Move L/R[/cyan]    Move window left or right in tiled layout\n"
-            "  [cyan]Group[/cyan]       Toggle tabbed window grouping\n"
-            "  [cyan]Save WS[/cyan]     Save desktop layout to ~/.benx/layouts/\n\n"
-            "[bold #61d8ff]Hardware Controls (Left Panel Buttons):[/bold #61d8ff]\n"
-            "  [cyan]Saver/Bal/Perf[/cyan] Switch Linux power profiles on-the-fly\n"
-            "  [cyan]Clip[/cyan]           Browse Wayland clipboard history (cliphist)\n"
-            "  [cyan]Sleep / Boot[/cyan]   Suspend or reboot with safety confirmation gate\n"
-            "[bold #60ffb9]══════════════════════════════════════════════════════════════════[/bold #60ffb9]\n"
+            "\n[bold #38bdf8]── BenX Assistant Hotkeys & Commands ──[/bold #38bdf8]\n"
+            "  [bold white]Enter[/bold white]       Send message / execute command\n"
+            "  [bold white]F1[/bold white]          Show this help guide\n"
+            "  [bold white]F2[/bold white]          Toggle Autonomous ReAct Agent\n"
+            "  [bold white]F3[/bold white]          Voice Input (Speech-to-Text)\n"
+            "  [bold white]F4[/bold white]          Screenshot Desktop for Vision OCR\n"
+            "  [bold white]F5[/bold white]          Refresh Telemetry & Workspaces\n"
+            "  [bold white]F6[/bold white]          Open Settings & Preferences\n"
+            "  [bold white]F8[/bold white]          Lock Desktop (hyprlock)\n"
+            "  [bold white]Ctrl+L[/bold white]      Clear chat log\n"
+            "  [bold white]Ctrl+C[/bold white]      Quit BenX\n"
+            "[dim #8b949e]Quick commands: 'open chrome', 'switch to workspace 2', 'set power-saver', 'top cpu processes'[/dim #8b949e]\n"
         )
 
-    # ── Helpers ───────────────────────────────────────────────────────────────
+    # ── Internal Helpers ──────────────────────────────────────────────────────
 
     def set_waveform_state(self, state: str):
         try:
-            wf = self.query_one("#top-waveform", TUIWaveformWidget)
+            wf = self.query_one("#header-waveform", TUIWaveformWidget)
             wf.set_state(state)
         except Exception:
             pass
 
-    def _log_mission(self, msg: str):
+    def _log(self, msg: str):
         try:
-            ts = datetime.now().strftime("%H:%M:%S")
-            log = self.query_one("#activity-stream", RichLog)
-            log.write(f"[dim #8eb5ac][{ts}][/dim #8eb5ac] {msg}")
+            self._set_status(msg)
         except Exception:
             pass
 
-    def _set_status_bar(self, status: str):
+    def _set_status(self, status: str):
         try:
-            lbl = self.query_one("#status-footer", Label)
-            lbl.update(
-                f"● {status}  │  F1 Help  │  F2 Agent  │  F3 Voice  │  F4 Screen  │  F6 Settings  │  F7 Rec  │  F8 Lock  │  Ctrl+C Quit"
-            )
+            lbl = self.query_one("#footer-status-bar", Label)
+            lbl.update(f"● {status}  │  Enter: Send  │  F1: Help  │  F2: Agent  │  F4: Screenshot  │  F6: Settings  │  Ctrl+C: Quit")
         except Exception:
             pass
 
