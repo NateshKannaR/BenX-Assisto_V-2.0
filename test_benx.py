@@ -263,6 +263,39 @@ class TestUIComponents(unittest.TestCase):
         self.assertTrue(hasattr(mod, "VoiceWaveformWidget"))
 
 
+class TestTUIComponents(unittest.TestCase):
+    def test_tui_waveform_widget(self):
+        from benx_tui import TUIWaveformWidget
+        wf = TUIWaveformWidget()
+        self.assertEqual(wf.state, "idle")
+        wf.set_state("listening")
+        self.assertEqual(wf.state, "listening")
+        wf.tick()
+        wf.set_state("recording")
+        wf.tick()
+        wf.set_state("thinking")
+        wf.tick()
+
+    def test_tui_modals_instantiation(self):
+        from benx_tui import TUIConfirmModal, TUISettingsModal, ClipboardModal
+        confirm = TUIConfirmModal("Test Title", "Test Message")
+        self.assertEqual(confirm.modal_title, "Test Title")
+        self.assertEqual(confirm.modal_message, "Test Message")
+
+        settings = TUISettingsModal()
+        self.assertIsNotNone(settings)
+
+        clipboard = ClipboardModal()
+        self.assertIsNotNone(clipboard)
+
+    def test_tui_app_instantiation(self):
+        from benx_tui import BenXTUI
+        app = BenXTUI()
+        self.assertIsNotNone(app)
+        self.assertEqual(app.agent_mode, False)
+
+
+
 def run_tests():
     suite = unittest.TestLoader().loadTestsFromModule(sys.modules[__name__])
     runner = unittest.TextTestRunner(verbosity=2)

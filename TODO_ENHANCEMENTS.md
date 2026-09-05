@@ -46,10 +46,27 @@ Progress Tracker: 3/3 Major Upgrades Completed ✅
     - Compact Mode (`BenX-Compact`): 420x560 pinned floating window matching `hyprland_rules.conf`, draggable titlebar, expand-to-full button, mini waveform, quick action chips, input bar with mic & system audio listener.
     - Notification Bar (`BenX-Notification`): Glassmorphic floating notification bar.
 
+## 4. Terminal User Interface (TUI) Full GTK4 Parity [COMPLETED ✅]
+- ✅ **Interactive Hyprland Workspace Tracker (1-10)**:
+  - Active & occupied workspace chips with client counts and live update cycle.
+  - Active window title and class display.
+  - Interactive Window Manager buttons: `[Float]`, `[Pin]`, `[Full]`, `[Move <]`, `[Move >]`, `[Group]`, `[Save WS]`, `[Close]`.
+- ✅ **Hardware & Power Control Toolbar**:
+  - Live Power Profile chips: `[Saver]`, `[Balanced]`, `[Performance]` with one-click switching via `PowerManager.set_profile`.
+  - Quick hardware buttons: `[🔒 Lock]`, `[💤 Sleep]`, `[📋 Clip]`, `[🔄 Boot]`, `[🛑 Off]`.
+- ✅ **Modal Safety & Configuration Screens**:
+  - `TUIConfirmModal`: Safety confirmation gate dialog for destructive actions (reboot, shutdown, process kill).
+  - `TUISettingsModal`: Model selector dropdown, OpenRouter & Groq API key manager with persistence to `.env`, autostart switch.
+  - `ClipboardModal`: Interactive `cliphist` clipboard viewer and search with direct copy to clipboard.
+- ✅ **Animated Waveform Visualizer**:
+  - `TUIWaveformWidget`: Real-time ASCII/Braille waveform visualizer with dynamic frequencies for `idle`, `listening`, `detected`, `recording`, and `thinking` states.
+- ✅ **CLI & Entry Point Integration**:
+  - `benx.py` defaults to full-featured TUI and provides `--tui`, `--gui`, `--cli` flags.
+
 ---
 
-## 4. Verification & Testing [COMPLETED ✅]
-- All 18 automated unit tests in `test_benx.py` passing:
+## 5. Verification & Testing [COMPLETED ✅]
+- All 21 automated unit tests in `test_benx.py` passing:
   - Config & AI engine loading.
   - Dangerous action confirmation guards.
   - Hyprland IPC, Window, Workspace, Monitor, Rules, Layout save/restore.

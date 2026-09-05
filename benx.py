@@ -9,10 +9,14 @@ import logging
 from datetime import datetime
 from pathlib import Path
 
-# CRITICAL: Load GTK4 BEFORE anything else
-import gi
-gi.require_version('Gtk', '4.0')
-gi.require_version('Adw', '1')
+# Optional GTK4/Adwaita import
+try:
+    import gi
+    gi.require_version('Gtk', '4.0')
+    gi.require_version('Adw', '1')
+    GTK_IMPORT_OK = True
+except Exception:
+    GTK_IMPORT_OK = False
 
 # Setup logging
 from jarvis_ai.config import Config
@@ -213,10 +217,16 @@ class BenX:
 def main():
     """Main entry point"""
     try:
-        use_gui = "--no-gui" not in sys.argv
-        
-        jarvis = BenX(use_gui=use_gui)
-        jarvis.run()
+        if "--cli" in sys.argv or "--no-gui" in sys.argv and "--tui" not in sys.argv:
+            jarvis = BenX(use_gui=False)
+            jarvis.run()
+        elif "--gui" in sys.argv:
+            jarvis = BenX(use_gui=True)
+            jarvis.run()
+        else:
+            # Default to full-featured GTK4-parity TUI
+            from benx_tui import BenXTUI
+            BenXTUI().run()
     except Exception as e:
         logger.error(f"Fatal error: {e}")
         print(f"❌ Fatal error: {str(e)}")
