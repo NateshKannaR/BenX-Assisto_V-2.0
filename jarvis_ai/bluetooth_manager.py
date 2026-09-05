@@ -106,12 +106,53 @@ class BluetoothManager:
         return f"✅ Bluetooth turned {state}" if ok else f"❌ Failed: {out[:100]}"
 
     @staticmethod
+    def trust(device: str) -> str:
+        mac = BluetoothManager._resolve_mac(device)
+        if not mac:
+            return f"❌ Device '{device}' not found."
+        ok, out = _bt(f"trust {mac}")
+        return f"✅ Device '{device}' marked as trusted." if ok else f"❌ Trust failed: {out[:100]}"
+
+    @staticmethod
+    def list_connected() -> str:
+        ok, out = _bt("devices Connected")
+        if not out.strip():
+            return "📡 No Bluetooth devices currently connected."
+        lines = ["📡 CONNECTED BLUETOOTH DEVICES:"]
+        for line in out.splitlines():
+            m = re.match(r"Device\s+([0-9A-F:]+)\s+(.+)", line, re.IGNORECASE)
+            if m:
+                lines.append(f"  • {m.group(2)} [{m.group(1)}]")
+        return "\n".join(lines)
+
+    @staticmethod
+    def device_info(device: str) -> str:
+        mac = BluetoothManager._resolve_mac(device)
+        if not mac:
+            return f"❌ Device '{device}' not found."
+        ok, out = _bt(f"info {mac}")
+        if not ok:
+            return f"❌ Failed to get info: {out[:100]}"
+        lines = [f"📡 Device Info ({device}):"]
+        for line in out.splitlines():
+            if any(k in line for k in ["Name:", "Alias:", "Connected:", "Paired:", "Trusted:", "Blocked:", "Battery Percentage"]):
+                lines.append(f"  {line.strip()}")
+        return "\n".join(lines)
+
+    @staticmethod
     def _resolve_mac(device: str) -> str:
-        """Resolve device name or MAC to MAC address"""
+        """Resolve device name or MAC to MAC address across paired and scanned devices."""
         if re.match(r"^([0-9A-F]{2}:){5}[0-9A-F]{2}$", device, re.IGNORECASE):
             return device.upper()
+        # Check paired first
         _, out = _bt("paired-devices")
         for line in out.splitlines():
+            m = re.match(r"Device\s+([0-9A-F:]+)\s+(.+)", line, re.IGNORECASE)
+            if m and device.lower() in m.group(2).lower():
+                return m.group(1).upper()
+        # Check all known devices
+        _, out_all = _bt("devices")
+        for line in out_all.splitlines():
             m = re.match(r"Device\s+([0-9A-F:]+)\s+(.+)", line, re.IGNORECASE)
             if m and device.lower() in m.group(2).lower():
                 return m.group(1).upper()

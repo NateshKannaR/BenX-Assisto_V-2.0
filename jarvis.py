@@ -575,9 +575,9 @@ Remember: You're not just executing commands - you're understanding the user's n
         # Default: return none to trigger chat mode
         return json.dumps({"command": "none"})
     
-@staticmethod
+    @staticmethod
     def interpret_command(text: str, conversation_context: List[Dict] = None, learning_engine=None) -> str:
-        \"\"\"Convert natural language to JSON command with advanced understanding\"\"\"
+        """Convert natural language to JSON command with advanced understanding"""
         # Check learned patterns first
         if learning_engine:
             learned = learning_engine.apply_learned_pattern(text)
@@ -585,7 +585,7 @@ Remember: You're not just executing commands - you're understanding the user's n
                 logger.info(f"Using learned pattern for command interpretation")
                 return learned
         
-        system_prompt = \"\"\"You are Jarvis AI's command interpreter. Your job is to understand user intent and convert it to precise JSON commands.
+        system_prompt = """You are Jarvis AI's command interpreter. Your job is to understand user intent and convert it to precise JSON commands.
 
 **NEW BROWSER SMART COMMANDS** (tab/workspace aware):
 * browser_open(url, workspace=N): Open/switch tab in WS N (smart: reuse if open)
@@ -593,8 +593,6 @@ Remember: You're not just executing commands - you're understanding the user's n
 * browser_switch_tab(query, workspace=N): Switch matching tab
 
 Examples: "open google in workspace 2", "switch to gmail tab", "list browser tabs"
-
-\"""
 
 THINKING PROCESS:
 1. Analyze the user's intent deeply - what do they REALLY want?

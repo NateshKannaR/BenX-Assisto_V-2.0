@@ -26,7 +26,7 @@ except ImportError:
 class AutomationEngine:
     """AI-powered automation engine with dry-run and step safety."""
 
-    RISKY_ACTIONS = {"click", "click_text", "type", "press", "hotkey", "drag"}
+    RISKY_ACTIONS = {"click", "click_text", "type", "press", "hotkey", "drag", "right_click", "double_click", "move_mouse"}
 
     def __init__(self, ai_engine: AIEngine):
         self.ai_engine = ai_engine
@@ -43,23 +43,32 @@ class AutomationEngine:
 Available actions:
 - click(x,y)
 - click_text(text)
+- right_click(x,y)
+- double_click(x,y)
+- move_mouse(x,y)
 - type(text)
 - press(key)
+- hotkey(keys)  e.g. keys="ctrl+c"
 - scroll(direction, amount)
+- drag(x1,y1,x2,y2,duration)
 - wait(seconds)
 - screenshot()
 - analyze_screen()
-- hotkey(keys)
-- drag(x1,y1,x2,y2,duration)
 - screen_aware_click(target_text)
+- open_app(app)
+- run_shell(cmd)
+- clipboard_copy(text)
+- clipboard_paste()
+- repeat(times, actions=[...])  repeat a sub-list of actions N times
+- repeat_until(condition_text, actions=[...], max_tries=10)  repeat until screen contains text
 
 Rules:
 - Keep plans minimal and safe.
-- Use click_text or screen_aware_click before raw click coordinates whenever possible.
+- Use click_text or screen_aware_click before raw coordinates whenever possible.
+- Add wait() after open_app() to let the app load.
 - Include a short human-readable description for every step.
 - Return ONLY valid JSON array.
 """
-
         prompt = f"""User wants to automate: "{user_instruction}"
 
 Return ONLY a valid JSON array like:
@@ -199,12 +208,34 @@ Return ONLY a valid JSON array like:
 
         if action == "type":
             text = params.get("text", "")
-            pyautogui.typewrite(text)
+            typed = False
+            try:
+                if AUTOMATION_AVAILABLE:
+                    pyautogui.typewrite(text)
+                    typed = True
+            except Exception:
+                pass
+            if not typed:
+                from jarvis_ai.type_terminal import type_in_active_window
+                res = type_in_active_window(text)
+                if "❌" in res:
+                    return f"❌ Step {index} failed: Could not type text ({res})"
             return f"✅ Step {index}: Typed '{text[:50]}'"
 
         if action == "press":
             key = params.get("key", "")
-            pyautogui.press(key.lower())
+            pressed = False
+            try:
+                if AUTOMATION_AVAILABLE:
+                    pyautogui.press(key.lower())
+                    pressed = True
+            except Exception:
+                pass
+            if not pressed:
+                import subprocess, shutil
+                if shutil.which("wtype"):
+                    subprocess.run(["wtype", "-k", key.lower()], check=False)
+                    pressed = True
             return f"✅ Step {index}: Pressed '{key}'"
 
         if action == "wait":
@@ -234,14 +265,81 @@ Return ONLY a valid JSON array like:
             pyautogui.dragTo(x2, y2, duration=duration, button="left")
             return f"✅ Step {index}: Dragged from ({x1}, {y1}) to ({x2}, {y2})"
 
+        if action == "right_click":
+            x, y = params.get("x", 0), params.get("y", 0)
+            pyautogui.rightClick(x, y)
+            return f"✅ Step {index}: Right-clicked at ({x}, {y})"
+
+        if action == "double_click":
+            x, y = params.get("x", 0), params.get("y", 0)
+            pyautogui.doubleClick(x, y)
+            return f"✅ Step {index}: Double-clicked at ({x}, {y})"
+
+        if action == "move_mouse":
+            x, y = params.get("x", 0), params.get("y", 0)
+            pyautogui.moveTo(x, y, duration=0.3)
+            return f"✅ Step {index}: Moved mouse to ({x}, {y})"
+
+        if action == "open_app":
+            from jarvis_ai.command_engine import CommandEngine
+            app = params.get("app", "")
+            result = CommandEngine.open_app(app)
+            time.sleep(params.get("wait", 1.5))
+            return f"✅ Step {index}: {result}"
+
+        if action == "run_shell":
+            from jarvis_ai.command_engine import CommandEngine
+            cmd = params.get("cmd", "")
+            result = CommandEngine.shell_execute(cmd)
+            return f"✅ Step {index}: Shell: {result[:100]}"
+
+        if action == "clipboard_copy":
+            import subprocess
+            text = params.get("text", "")
+            subprocess.run(["wl-copy"], input=text.encode(), check=False)
+            return f"✅ Step {index}: Copied to clipboard: {text[:40]}"
+
+        if action == "clipboard_paste":
+            pyautogui.hotkey("ctrl", "v")
+            return f"✅ Step {index}: Pasted from clipboard"
+
+        if action == "repeat":
+            times = int(params.get("times", 1))
+            sub_actions = params.get("actions", [])
+            results = []
+            for t in range(times):
+                for sub in sub_actions:
+                    r = self._execute_action(index, sub.get("action", ""), sub.get("params", {}))
+                    results.append(r)
+            return f"✅ Step {index}: Repeated {times}x — {len(results)} sub-steps done"
+
+        if action == "repeat_until":
+            condition = params.get("condition_text", "")
+            sub_actions = params.get("actions", [])
+            max_tries = int(params.get("max_tries", 10))
+            for attempt in range(max_tries):
+                # Check screen for condition
+                from jarvis_ai.command_engine import CommandEngine
+                CommandEngine.take_screenshot()
+                try:
+                    from PIL import Image
+                    import pytesseract
+                    text = pytesseract.image_to_string(Image.open(Config.SCREENSHOT_PATH))
+                    if condition.lower() in text.lower():
+                        return f"✅ Step {index}: Condition '{condition}' met after {attempt+1} tries"
+                except Exception:
+                    pass
+                for sub in sub_actions:
+                    self._execute_action(index, sub.get("action", ""), sub.get("params", {}))
+                time.sleep(1)
+            return f"⚠️ Step {index}: Condition '{condition}' not met after {max_tries} tries"
+
         if action == "screenshot":
             from jarvis_ai.command_engine import CommandEngine
-
             return f"✅ Step {index}: {CommandEngine.take_screenshot()}"
 
         if action == "analyze_screen":
             from jarvis_ai.command_engine import CommandEngine
-
             screenshot_result = CommandEngine.take_screenshot()
             if "❌" in screenshot_result:
                 return f"❌ Step {index}: {screenshot_result}"

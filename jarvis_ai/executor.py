@@ -30,14 +30,29 @@ class CommandExecutor:
 
     CONFIRM_ACTIONS = {
         "delete_file",
+        "file_trash",
         "shutdown",
+        "power_shutdown",
         "restart",
+        "reboot",
+        "power_reboot",
         "suspend",
+        "power_suspend",
+        "hibernate",
+        "power_hibernate",
         "kill_process",
+        "process_kill",
         "install_package",
+        "pkg_install",
         "update_system",
+        "pkg_update_system",
         "move_file",
         "copy_file",
+        "file_move",
+        "file_copy",
+        "service_manage",
+        "clipboard_wipe",
+        "hypr_delete_layout",
     }
 
     FILE_ACTIONS = {
@@ -281,7 +296,7 @@ class CommandExecutor:
                 "create_file": lambda: CommandEngine.create_file(obj.get("path", ""), obj.get("content", "")),
                 "edit_file": lambda: CommandEngine.edit_file(obj.get("path", ""), obj.get("old_str", ""), obj.get("new_str", "")),
 
-                # Workspace / Window Management
+                # Workspace / Window Management (Hyprland)
                 "list_workspaces": lambda: CommandEngine.list_workspaces(),
                 "switch_workspace": lambda: CommandEngine.switch_workspace(int(obj.get("value", 1))),
                 "move_to_workspace": lambda: CommandEngine.move_to_workspace(int(obj.get("value", 1))),
@@ -290,6 +305,72 @@ class CommandExecutor:
                 "close_active_window": lambda: CommandEngine.close_active_window(),
                 "toggle_fullscreen": lambda: CommandEngine.toggle_fullscreen(),
                 "toggle_float": lambda: CommandEngine.toggle_float(),
+
+                # Extended Hyprland Actions
+                "hypr_move_window": lambda: CommandEngine.hypr_move_window(obj.get("direction", obj.get("text", "right"))),
+                "hypr_resize_window": lambda: CommandEngine.hypr_resize_window(obj.get("delta", obj.get("text", "grow"))),
+                "hypr_tile_all": lambda: CommandEngine.hypr_tile_all(obj.get("workspace")),
+                "hypr_toggle_pin": lambda: CommandEngine.hypr_toggle_pin(obj.get("app", obj.get("query"))),
+                "hypr_toggle_group": lambda: CommandEngine.hypr_toggle_group(),
+                "hypr_cycle_group": lambda: CommandEngine.hypr_cycle_group(obj.get("direction", "f")),
+                "hypr_lock_groups": lambda: CommandEngine.hypr_lock_groups(),
+                "hypr_save_layout": lambda: CommandEngine.hypr_save_layout(obj.get("name", obj.get("text", "default"))),
+                "hypr_restore_layout": lambda: CommandEngine.hypr_restore_layout(obj.get("name", obj.get("text", "default"))),
+                "hypr_list_layouts": lambda: CommandEngine.hypr_list_layouts(),
+                "hypr_delete_layout": lambda: CommandEngine.hypr_delete_layout(obj.get("name", obj.get("text", ""))),
+                "hypr_cycle_workspaces": lambda: CommandEngine.hypr_cycle_workspaces(obj.get("direction", "next")),
+                "hypr_move_to_special": lambda: CommandEngine.hypr_move_to_special(obj.get("name", "special"), silent=obj.get("silent", False)),
+                "hypr_toggle_special": lambda: CommandEngine.hypr_toggle_special(obj.get("name", "special")),
+                "hypr_list_monitors": lambda: CommandEngine.hypr_list_monitors(),
+                "hypr_apply_monitor_profile": lambda: CommandEngine.hypr_apply_monitor_profile(obj.get("profile", "docked")),
+                "hypr_screenshot_fullscreen": lambda: CommandEngine.hypr_screenshot_fullscreen(obj.get("path")),
+                "hypr_screenshot_region": lambda: CommandEngine.hypr_screenshot_region(obj.get("path")),
+                "hypr_screenshot_window": lambda: CommandEngine.hypr_screenshot_window(obj.get("path")),
+                "hypr_start_recording": lambda: CommandEngine.hypr_start_recording(audio=obj.get("audio", False)),
+                "hypr_stop_recording": lambda: CommandEngine.hypr_stop_recording(),
+                "hypr_clipboard_history": lambda: CommandEngine.hypr_clipboard_history(int(obj.get("value", 15))),
+                "hypr_clipboard_search": lambda: CommandEngine.hypr_clipboard_search(obj.get("query", obj.get("text", ""))),
+                "hypr_clipboard_paste": lambda: CommandEngine.hypr_clipboard_paste(str(obj.get("value", obj.get("text", "0")))),
+                "hypr_add_window_rule": lambda: CommandEngine.hypr_add_window_rule(
+                    obj.get("rule", "float on"),
+                    obj.get("target", obj.get("app", "")),
+                    obj.get("match_type", "title")
+                ),
+                "hypr_remove_window_rule": lambda: CommandEngine.hypr_remove_window_rule(obj.get("target", obj.get("query", ""))),
+
+                # Laptop Control
+                "power_profile": lambda: CommandEngine.power_profile(obj.get("profile")),
+                "power_set_profile": lambda: CommandEngine.power_profile(obj.get("profile")),
+                "power_suspend": lambda: CommandEngine.suspend(),
+                "power_hibernate": lambda: CommandEngine.power_hibernate(),
+                "power_reboot": lambda: CommandEngine.restart(),
+                "power_shutdown": lambda: CommandEngine.shutdown(),
+                "wifi_list": lambda: CommandEngine.wifi_list(),
+                "wifi_scan": lambda: CommandEngine.wifi_list(),
+                "wifi_connect": lambda: CommandEngine.wifi_connect(obj.get("ssid", ""), obj.get("password")),
+                "wifi_disconnect": lambda: CommandEngine.wifi_disconnect(),
+                "wifi_forget": lambda: CommandEngine.wifi_forget(obj.get("ssid", "")),
+                "vpn_list": lambda: CommandEngine.vpn_list(),
+                "vpn_toggle": lambda: CommandEngine.vpn_toggle(obj.get("name")),
+                "network_info": lambda: CommandEngine.network_info(),
+                "process_top": lambda: CommandEngine.process_top(int(obj.get("value", 10)), obj.get("sort_by", "cpu")),
+                "process_kill": lambda: CommandEngine.process_kill(obj.get("process", obj.get("query", obj.get("value", "")))),
+                "pkg_search": lambda: CommandEngine.pkg_search(obj.get("package", obj.get("query", ""))),
+                "pkg_check_updates": lambda: CommandEngine.pkg_check_updates(),
+                "pkg_install": lambda: CommandEngine.pkg_install(obj.get("package", "")),
+                "pkg_update_system": lambda: CommandEngine.pkg_update_system(),
+                "input_click": lambda: CommandEngine.input_click(int(obj.get("value", 1))),
+                "input_type": lambda: CommandEngine.input_type(obj.get("text", "")),
+                "file_trash": lambda: CommandEngine.file_trash(obj.get("path", "")),
+                "file_move": lambda: CommandEngine.file_move(obj.get("path", ""), obj.get("dest", "")),
+                "file_copy": lambda: CommandEngine.file_copy(obj.get("path", ""), obj.get("dest", "")),
+                "file_rename": lambda: CommandEngine.file_rename(obj.get("path", ""), obj.get("name", obj.get("dest", ""))),
+                "service_status": lambda: CommandEngine.service_status(obj.get("service", obj.get("name", "")), user_mode=obj.get("user", False)),
+                "service_manage": lambda: CommandEngine.service_manage(
+                    obj.get("service", obj.get("name", "")),
+                    obj.get("action", "status"),
+                    user_mode=obj.get("user", False)
+                ),
 
                 # Bluetooth
                 "bluetooth_list_paired": lambda: CommandEngine.bluetooth_list_paired(),
@@ -332,6 +413,10 @@ class CommandExecutor:
                 "type_in_ws_terminal": lambda: CommandEngine.type_in_ws_terminal(obj.get("workspace", 1), obj.get("text", "")),
                 "type_in_active_window": lambda: CommandEngine.type_in_active_window(obj.get("text", "")),
                 "type_in_app": lambda: CommandEngine.type_in_app(obj.get("app", ""), obj.get("text", "")),
+                # New enhanced automation
+                "run_script":   lambda: CommandEngine.run_script(obj.get("path", "")),
+                "watch_file":   lambda: CommandEngine.watch_file(obj.get("path", ""), int(obj.get("duration", 10))),
+                "notify_when":  lambda: CommandEngine.notify_when(obj.get("cmd", ""), obj.get("message", ""), int(obj.get("interval", 5)), int(obj.get("timeout", 60))),
             }
             
             if action in command_map:

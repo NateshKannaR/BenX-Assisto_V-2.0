@@ -137,12 +137,25 @@ class WakeWordEngine:
     Runs in background thread, calls on_wake_word(command_text) when triggered.
     """
 
-    def __init__(self, on_wake_word: Callable[[str], None]):
+    def __init__(self, on_wake_word: Callable[[str], None], on_state_change: Optional[Callable[[str], None]] = None):
         self.on_wake_word = on_wake_word
+        self.on_state_change = on_state_change
         self._stop = threading.Event()
         self._thread: Optional[threading.Thread] = None
         self._active = False
         self._source: Optional[str] = None
+        self._state = "idle"
+
+    def _set_state(self, state: str):
+        self._state = state
+        if self.on_state_change:
+            try:
+                self.on_state_change(state)
+            except Exception as e:
+                logger.debug(f"Error in on_state_change callback: {e}")
+
+    def get_state(self) -> str:
+        return self._state
 
     def start(self) -> str:
         if self._active:
@@ -153,6 +166,7 @@ class WakeWordEngine:
         self._source = source
         self._stop.clear()
         self._active = True
+        self._set_state("listening")
         self._thread = threading.Thread(target=self._loop, daemon=True)
         self._thread.start()
         logger.info("Wake word engine started on source: %s", source)
@@ -161,6 +175,7 @@ class WakeWordEngine:
     def stop(self):
         self._stop.set()
         self._active = False
+        self._set_state("idle")
         logger.info("Wake word engine stopped")
 
     def is_active(self) -> bool:
@@ -190,17 +205,23 @@ class WakeWordEngine:
                     continue
 
                 logger.info("Wake word detected in: '%s'", text)
+                self._set_state("detected")
 
                 inline = self._extract_inline_command(text)
                 if inline:
+                    self._set_state("thinking")
                     self.on_wake_word(inline)
+                    self._set_state("listening")
                     continue
 
+                self._set_state("recording")
                 cmd_wav = _record_wav(self._source, CMD_CHUNK_SEC)
                 if not cmd_wav:
+                    self._set_state("listening")
                     self.on_wake_word("")
                     continue
 
+                self._set_state("thinking")
                 cmd_text = _transcribe_groq(cmd_wav)
                 try:
                     os.remove(cmd_wav)
@@ -208,6 +229,7 @@ class WakeWordEngine:
                     logger.debug("Failed to remove cmd wav: %s", e)
 
                 self.on_wake_word(cmd_text.strip() if cmd_text else "")
+                self._set_state("listening")
 
             except (subprocess.SubprocessError, OSError, requests.RequestException) as e:
                 logger.warning("Wake word engine transient error: %s", e)

@@ -25,8 +25,25 @@ search_files(path, query)      - Find files matching query
 ai_think(prompt)               - Use AI to reason, write, analyze, summarize, generate code
 open_app(app)                  - Open an application
 open_url(url)                  - Open URL in browser
+gui_click(target)              - Click on screen by text name or x,y coords (e.g. "Save", "500,300")
+gui_type(text)                 - Type text into focused window (Wayland/X11)
+gui_hotkey(keys)               - Send keyboard shortcut (e.g. "ctrl+c", "ctrl+v", "alt+tab")
+gui_scroll(direction, amount)  - Scroll screen up or down
+gui_drag(x1, y1, x2, y2)       - Drag mouse from (x1, y1) to (x2, y2)
+browser_open(url, workspace)   - Open/switch tab in browser (workspace optional)
+browser_click(selector)        - Click element matching CSS selector in active browser tab
+browser_fill(selector, text)   - Type text into browser input matching selector
 browser_scrape(url, selector)  - Scrape webpage (selector optional)
 browser_search(query)          - Search the web
+browser_screenshot(url)        - Screenshot web page
+mobile_tap(target)             - Tap on Android screen by text or x,y coords
+mobile_swipe(x1,y1,x2,y2)      - Swipe gesture on connected phone
+mobile_input(text)             - Type text into focused field on phone
+mobile_launch(package)         - Launch app on phone by package name
+mobile_screenshot()            - Capture phone screenshot
+ws_type(workspace, text)       - Type directly into terminal window on Hyprland workspace N
+ws_switch(workspace)           - Switch active Hyprland workspace
+schedule(when, task)           - Schedule a task (e.g. when="in 10m", task="take break")
 email_inbox(count)             - Read inbox (count optional, default 5)
 email_read(index)              - Read email body (1=latest)
 email_send(to, subject, body)  - Send email
@@ -136,10 +153,12 @@ class AgentOrchestrator:
             context = scratchpad[-22:]
             last = context[-1]["content"]
             history = context[:-1]
+            model_pref = getattr(self, "model", None)
             return self.ai.query_groq(
                 REACT_SYSTEM, last,
                 conversation_context=history,
-                task_type="reason"
+                task_type="reason",
+                model_preference=model_pref
             )
         except Exception as e:
             logger.error(f"Agent AI call failed: {e}")
@@ -173,8 +192,13 @@ class AgentOrchestrator:
     def _known_tools(self):
         return {
             "shell", "read_file", "write_file", "append_file", "list_files",
-            "search_files", "ai_think", "open_app", "open_url", "browser_scrape",
-            "browser_search", "email_inbox", "email_read", "email_send", "notify",
+            "search_files", "ai_think", "open_app", "open_url",
+            "gui_click", "gui_type", "gui_hotkey", "gui_scroll", "gui_drag",
+            "browser_open", "browser_click", "browser_fill", "browser_scrape",
+            "browser_search", "browser_screenshot", "browser_list_tabs", "browser_switch_tab",
+            "mobile_tap", "mobile_swipe", "mobile_input", "mobile_launch", "mobile_screenshot",
+            "ws_type", "ws_switch", "schedule",
+            "email_inbox", "email_read", "email_send", "notify",
             "screenshot", "system_info", "workspace_state", "bluetooth_list",
             "bluetooth_connect", "git", "python_run", "remember", "recall", "finish"
         }
@@ -193,7 +217,17 @@ class AgentOrchestrator:
             "write_file": ["path", "content"], "append_file": ["path", "content"],
             "list_files": ["path"], "search_files": ["path", "query"],
             "ai_think": ["prompt"], "open_app": ["app"], "open_url": ["url"],
-            "browser_scrape": ["url", "selector"], "browser_search": ["query"],
+            "gui_click": ["target"], "gui_type": ["text"], "gui_hotkey": ["keys"],
+            "gui_scroll": ["direction", "amount"], "gui_drag": ["x1", "y1", "x2", "y2"],
+            "browser_open": ["url", "workspace"], "browser_click": ["selector"],
+            "browser_fill": ["selector", "text"], "browser_scrape": ["url", "selector"],
+            "browser_search": ["query"], "browser_screenshot": ["url"],
+            "browser_list_tabs": ["workspace"], "browser_switch_tab": ["query", "workspace"],
+            "mobile_tap": ["target"], "mobile_swipe": ["x1", "y1", "x2", "y2"],
+            "mobile_input": ["text"], "mobile_launch": ["package"],
+            "mobile_screenshot": [],
+            "ws_type": ["workspace", "text"], "ws_switch": ["workspace"],
+            "schedule": ["when", "task"],
             "email_inbox": ["count"], "email_read": ["index"],
             "email_send": ["to", "subject", "body"],
             "notify": ["title", "body", "urgency"],
@@ -203,10 +237,18 @@ class AgentOrchestrator:
         }
         param_names = PARAM_MAPS.get(tool_name, ["value"])
         parts = self._split_params(raw)
-        return {
-            (param_names[i] if i < len(param_names) else f"arg{i}"): part.strip().strip("\"'")
-            for i, part in enumerate(parts)
-        }
+        res = {}
+        for i, part in enumerate(parts):
+            part = part.strip()
+            if "=" in part and not (part.startswith("{") or part.startswith("[")):
+                k, v = part.split("=", 1)
+                k = k.strip()
+                v = v.strip().strip("\"'")
+                res[k] = v
+            else:
+                key = param_names[i] if i < len(param_names) else f"arg{i}"
+                res[key] = part.strip("\"'")
+        return res
 
     def _split_params(self, raw: str) -> List[str]:
         parts, current, depth, in_quote = [], [], 0, None
@@ -261,6 +303,109 @@ class AgentOrchestrator:
             elif tool_name == "open_url":
                 from jarvis_ai.command_engine import CommandEngine
                 return CommandEngine.open_url(params.get("url", ""))
+            elif tool_name == "gui_click":
+                from jarvis_ai.screen_analyzer import ScreenAnalyzer
+                target = params.get("target", "")
+                if "," in target and all(p.strip().lstrip("-").isdigit() for p in target.split(",")):
+                    coords = [int(p.strip()) for p in target.split(",")]
+                    import pyautogui
+                    pyautogui.click(coords[0], coords[1])
+                    return f"✅ Clicked at ({coords[0]}, {coords[1]})"
+                coords = ScreenAnalyzer.find_text_on_screen(target)
+                if coords:
+                    import pyautogui
+                    pyautogui.click(coords[0], coords[1])
+                    return f"✅ Clicked '{target}' at ({coords[0]}, {coords[1]})"
+                return f"⚠️ Could not locate '{target}' on screen via OCR."
+            elif tool_name == "gui_type":
+                text = params.get("text", "")
+                from jarvis_ai.type_terminal import type_in_active_window
+                res = type_in_active_window(text)
+                if "❌" in res:
+                    try:
+                        import pyautogui
+                        pyautogui.typewrite(text)
+                        return f"✅ Typed '{text[:40]}'"
+                    except Exception as exc:
+                        return f"❌ gui_type error: {exc}"
+                return res
+            elif tool_name == "gui_hotkey":
+                keys = params.get("keys", "")
+                try:
+                    import pyautogui
+                    key_list = [k.strip().lower() for k in keys.split("+") if k.strip()]
+                    pyautogui.hotkey(*key_list)
+                    return f"✅ Sent hotkey: {keys}"
+                except Exception as exc:
+                    return f"❌ gui_hotkey error: {exc}"
+            elif tool_name == "gui_scroll":
+                direction = params.get("direction", "down")
+                amount = int(params.get("amount", 3))
+                try:
+                    import pyautogui
+                    pyautogui.scroll(-amount if direction == "down" else amount)
+                    return f"✅ Scrolled {direction} {amount}"
+                except Exception as exc:
+                    return f"❌ gui_scroll error: {exc}"
+            elif tool_name == "gui_drag":
+                try:
+                    import pyautogui
+                    x1, y1 = int(params.get("x1", 0)), int(params.get("y1", 0))
+                    x2, y2 = int(params.get("x2", 0)), int(params.get("y2", 0))
+                    pyautogui.moveTo(x1, y1)
+                    pyautogui.dragTo(x2, y2, duration=0.5, button="left")
+                    return f"✅ Dragged from ({x1}, {y1}) to ({x2}, {y2})"
+                except Exception as exc:
+                    return f"❌ gui_drag error: {exc}"
+            elif tool_name == "browser_open":
+                from jarvis_ai.browser_automation import BrowserAutomation
+                ws = int(params.get("workspace")) if params.get("workspace") and str(params.get("workspace")).isdigit() else None
+                return BrowserAutomation.smart_open(params.get("url", ""), workspace=ws)
+            elif tool_name == "browser_click":
+                from jarvis_ai.browser_automation import BrowserAutomation
+                return BrowserAutomation.click(params.get("url", ""), params.get("selector", ""))
+            elif tool_name == "browser_fill":
+                from jarvis_ai.browser_automation import BrowserAutomation
+                return BrowserAutomation.fill_form(params.get("url", ""), {params.get("selector", ""): params.get("text", "")})
+            elif tool_name == "browser_screenshot":
+                from jarvis_ai.browser_automation import BrowserAutomation
+                return BrowserAutomation.screenshot(params.get("url", ""))
+            elif tool_name == "mobile_tap":
+                from jarvis_ai.mobile_automation import MobileAutomationEngine
+                m = MobileAutomationEngine(self.ai)
+                target = params.get("target", "")
+                if "," in target and all(p.strip().isdigit() for p in target.split(",")):
+                    x, y = [int(p.strip()) for p in target.split(",")]
+                    return m.tap(x=x, y=y)
+                return m.tap(text=target)
+            elif tool_name == "mobile_swipe":
+                from jarvis_ai.mobile_automation import MobileAutomationEngine
+                m = MobileAutomationEngine(self.ai)
+                return m.swipe(int(params.get("x1", 0)), int(params.get("y1", 0)),
+                               int(params.get("x2", 0)), int(params.get("y2", 0)))
+            elif tool_name == "mobile_input":
+                from jarvis_ai.mobile_automation import MobileAutomationEngine
+                m = MobileAutomationEngine(self.ai)
+                return m.input_text(params.get("text", ""))
+            elif tool_name == "mobile_launch":
+                from jarvis_ai.mobile_automation import MobileAutomationEngine
+                m = MobileAutomationEngine(self.ai)
+                return m.launch_app(params.get("package", ""))
+            elif tool_name == "mobile_screenshot":
+                from jarvis_ai.mobile_automation import MobileAutomationEngine
+                m = MobileAutomationEngine(self.ai)
+                return m.screenshot()
+            elif tool_name == "ws_type":
+                from jarvis_ai.command_engine import CommandEngine
+                ws_val = int(params.get("workspace", 1)) if str(params.get("workspace", "1")).isdigit() else 1
+                return CommandEngine.type_in_ws_terminal(ws_val, params.get("text", ""))
+            elif tool_name == "ws_switch":
+                from jarvis_ai.workspace_monitor import WorkspaceMonitor
+                ws_val = int(params.get("workspace", 1)) if str(params.get("workspace", "1")).isdigit() else 1
+                return WorkspaceMonitor.switch_workspace(ws_val)
+            elif tool_name == "schedule":
+                from jarvis_ai.scheduler import Scheduler
+                return Scheduler().schedule_task(params.get("task", ""), params.get("when", ""))
             elif tool_name == "browser_scrape":
                 from jarvis_ai.browser_automation import BrowserAutomation
                 return BrowserAutomation.scrape(params.get("url", ""), params.get("selector", "body"))

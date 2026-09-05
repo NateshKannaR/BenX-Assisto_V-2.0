@@ -63,6 +63,10 @@ def get_file_size(path: Path) -> int:
     except Exception:
         return 0
 
+def log_action(message: str):
+    """Log an action"""
+    logger.info(message)
+
 
 
 

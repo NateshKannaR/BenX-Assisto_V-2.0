@@ -19,7 +19,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 if __name__ == "__main__":
     print("🎯 Starting BenX with GTK4 UI (Native Wayland)...")
-    
-    # Now import and run
+    if "--gtk" not in sys.argv:
+        sys.argv.append("--gtk")
     from benx import main
     main()

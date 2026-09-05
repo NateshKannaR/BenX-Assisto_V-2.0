@@ -99,21 +99,42 @@ class BeautifulBenXGTK4(Adw.ApplicationWindow):
         eyebrow.add_css_class("eyebrow-label")
         title_copy.append(eyebrow)
 
-        title_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
+        title_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+
+        # Vector App Icon
+        icon_path = Path(__file__).parent / "assets" / "benx-symbolic.svg"
+        if icon_path.exists():
+            app_icon = Gtk.Image.new_from_file(str(icon_path))
+            app_icon.set_pixel_size(24)
+            title_row.append(app_icon)
 
         title_label = Gtk.Label(label="BenX", xalign=0)
         title_label.add_css_class("title-huge")
         title_row.append(title_label)
+
+        # AI Model Tag
+        self.top_model_badge = Gtk.Label(label=f"[{getattr(self.config, 'OPENROUTER_MODEL', 'Llama 3.3').split('/')[-1][:12]}]")
+        self.top_model_badge.add_css_class("topbar-badge")
+        title_row.append(self.top_model_badge)
 
         title_copy.append(title_row)
         
         title_box.append(title_copy)
         
         # Window control buttons
-        controls_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        controls_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
         controls_box.add_css_class("window-controls")
+
+        # Settings Button (Opens Libadwaita PreferencesWindow)
+        settings_btn = Gtk.Button()
+        settings_btn.set_child(Gtk.Image.new_from_icon_name("preferences-system-symbolic"))
+        settings_btn.add_css_class("flat")
+        settings_btn.add_css_class("window-tool-btn")
+        settings_btn.set_tooltip_text("Open BenX Settings (Models, Keys, Autostart)")
+        settings_btn.connect("clicked", self.on_open_settings)
+        controls_box.append(settings_btn)
         
-        close_btn = self.create_window_dot_button("window-dot-red", lambda w: self.get_application().quit())
+        close_btn = self.create_window_dot_button("window-dot-red", lambda w: self.destroy())
         controls_box.append(close_btn)
         
         minimize_btn = self.create_window_dot_button("window-dot-yellow", self.on_minimize_clicked)
@@ -124,6 +145,10 @@ class BeautifulBenXGTK4(Adw.ApplicationWindow):
         
         title_box.append(controls_box)
         
+        # Adw ToastOverlay
+        self.toast_overlay = Adw.ToastOverlay()
+        main_box.append(self.toast_overlay)
+
         # Content: 3 panels
         content_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
         content_box.set_margin_start(20)
@@ -132,7 +157,7 @@ class BeautifulBenXGTK4(Adw.ApplicationWindow):
         content_box.set_margin_bottom(20)
         content_box.set_hexpand(True)
         content_box.set_vexpand(True)
-        main_box.append(content_box)
+        self.toast_overlay.set_child(content_box)
         
         # LEFT PANEL - System Info
         left_panel = self.create_left_panel()
@@ -220,11 +245,22 @@ class BeautifulBenXGTK4(Adw.ApplicationWindow):
         logo_frame.set_vexpand(True)
         
         self.logo_area = Gtk.DrawingArea()
-        self.logo_area.set_hexpand(True)
-        self.logo_area.set_vexpand(True)
         self.logo_area.set_draw_func(self.draw_logo)
         logo_frame.set_child(self.logo_area)
         box.append(logo_frame)
+
+        # Voice Waveform Visualizer
+        from jarvis_ai.gui.waveform_widget import VoiceWaveformWidget
+        self.voice_waveform = VoiceWaveformWidget()
+        box.append(self.voice_waveform)
+
+        # Hyprland Workspace Tracker
+        self.ws_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        self.ws_box.add_css_class("ws-tracker-box")
+        self.ws_box.set_halign(Gtk.Align.CENTER)
+        box.append(self.ws_box)
+        GLib.timeout_add(2000, self._update_workspace_bar)
+        GLib.idle_add(self._update_workspace_bar)
 
         log_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
         log_box.add_css_class("panel-header-box")
@@ -267,38 +303,33 @@ class BeautifulBenXGTK4(Adw.ApplicationWindow):
         frame.set_child(box)
         
         # Chat header
-        # Chat header
         header_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
         header_box.add_css_class("panel-header-box")
-        
         box.append(header_box)
 
         # AI Controls row (Model + Agent toggle)
-        ai_controls = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
-        ai_controls.set_margin_top(8)
-        ai_controls.set_margin_bottom(8)
+        controls_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
+        controls_row.set_margin_bottom(8)
 
-        # Model selector
-        model_label = Gtk.Label(label="Model:", halign=Gtk.Align.START)
+        model_label = Gtk.Label(label="Model:")
         model_label.add_css_class("control-label")
-        ai_controls.append(model_label)
+        controls_row.append(model_label)
 
         self.model_combo = Gtk.ComboBoxText()
-        for model in self.config.MODELS:
-            self.model_combo.append_text(model)
-        self.model_combo.set_active(0)  # Default to first model
-        ai_controls.append(self.model_combo)
+        model_list = ["Auto (Best)"] + self.config.MODELS[:]
+        for m in model_list:
+            self.model_combo.append_text(m)
+        self.model_combo.set_active(0)
+        controls_row.append(self.model_combo)
 
-        # Agent mode toggle
-        agent_label = Gtk.Label(label="Agent:", halign=Gtk.Align.START)
+        agent_label = Gtk.Label(label="Agent:")
         agent_label.add_css_class("control-label")
-        ai_controls.append(agent_label)
+        controls_row.append(agent_label)
 
         self.agent_switch = Gtk.Switch()
-        self.agent_switch.set_active(False)
-        ai_controls.append(self.agent_switch)
+        controls_row.append(self.agent_switch)
 
-        box.append(ai_controls)
+        box.append(controls_row)
 
         # Chat area
         scroll = Gtk.ScrolledWindow()
@@ -323,56 +354,20 @@ class BeautifulBenXGTK4(Adw.ApplicationWindow):
         self.helper_label.add_css_class("helper-label")
         box.append(self.helper_label)
 
-        # Model selector & agent toggle (Web parity)
-        controls_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
-        controls_row.set_margin_bottom(12)
-
-        model_label = Gtk.Label(label="Model:")
-        model_label.add_css_class("control-label")
-        controls_row.append(model_label)
-
-        self.model_combo = Gtk.ComboBoxText()
-        model_list = ["Auto (Best)"] + self.config.MODELS[:]
-        for m in model_list:
-            self.model_combo.append_text(m)
-        self.model_combo.set_active(0)
-        controls_row.append(self.model_combo)
-
-        agent_label = Gtk.Label(label="Agent:")
-        agent_label.add_css_class("control-label")
-        controls_row.append(agent_label)
-
-        self.agent_switch = Gtk.Switch()
-        controls_row.append(self.agent_switch)
-
-        box.append(controls_row)
-
-        # Suggestion chips (Web parity)
+        # Suggestion chips (Hyprland & Laptop quick actions)
         chips_label = Gtk.Label(label="Quick Actions:")
         chips_label.add_css_class("panel-kicker")
         box.append(chips_label)
 
         self.chips_flowbox = Gtk.FlowBox()
-        self.chips_flowbox.set_max_children_per_line(4)
+        self.chips_flowbox.set_max_children_per_line(6)
         self.chips_flowbox.set_selection_mode(Gtk.SelectionMode.NONE)
-        self.chips_flowbox.set_homogeneous(True)
-
-        suggestions = [
-            "Scan project", "Check resources", "Automate task", "Analyze screen"
-        ]
-        for text in suggestions:
-            chip_btn = Gtk.Button(label=text)
-            chip_btn.connect("clicked", lambda b, t=text: self.on_chip_clicked(t))
-            chip_btn.add_css_class("suggestion-chip")
-            self.chips_flowbox.append(chip_btn)
-
-        box.append(self.chips_flowbox)
-
-        # Input row: [+] [entry] [➤]
         self.chips_flowbox.set_homogeneous(True)
         self.chips_flowbox.add_css_class("chips-container")
 
-        suggestions = ["Scan project", "Check resources", "Automate task", "Analyze screen"]
+        suggestions = [
+            "📸 Screenshot", "🔒 Lock Screen", "📐 Save Layout", "⚡ Power Saver", "📶 Wi-Fi Scan", "👁️ OCR Screen"
+        ]
         for text in suggestions:
             chip_btn = Gtk.Button(label=text)
             chip_btn.connect("clicked", lambda b, t=text: self.on_chip_clicked(t))
@@ -473,9 +468,10 @@ class BeautifulBenXGTK4(Adw.ApplicationWindow):
     def _build_css(self) -> bytes:
         """Return the full CSS stylesheet as bytes."""
         css_file = Path(__file__).with_suffix('.css')
+        extra_css = b""
         if css_file.exists():
-            return css_file.read_bytes()
-        return b"""
+            extra_css = css_file.read_bytes()
+        base_css = b"""
             /* Main window */
             window {
                 background: radial-gradient(circle at top left, rgba(12, 38, 27, 0.12) 0%, transparent 20%),
@@ -1192,7 +1188,91 @@ class BeautifulBenXGTK4(Adw.ApplicationWindow):
                 color: #ffffff;
                 font-family: 'Arial', sans-serif;
             }
+
+            /* Topbar badges and tools */
+            .topbar-badge {
+                background: rgba(14, 25, 20, 0.8);
+                color: #8fb5ad;
+                border: 1px solid rgba(82, 255, 173, 0.2);
+                border-radius: 12px;
+                padding: 2px 8px;
+                font-family: 'Share Tech Mono', monospace;
+                font-size: 8pt;
+            }
+
+            .window-tool-btn {
+                background: rgba(14, 25, 20, 0.7);
+                border: 1px solid rgba(82, 255, 173, 0.25);
+                border-radius: 50%;
+                min-width: 28px;
+                min-height: 28px;
+                padding: 0;
+                color: #60ffb9;
+                transition: all 0.2s ease;
+            }
+            .window-tool-btn:hover {
+                background: rgba(82, 255, 173, 0.2);
+                border-color: #60ffb9;
+                box-shadow: 0 0 10px rgba(96, 255, 185, 0.3);
+            }
+
+            /* Workspace Tracker */
+            .ws-tracker-box {
+                background: rgba(4, 10, 8, 0.75);
+                border: 1px solid rgba(82, 255, 173, 0.2);
+                border-radius: 16px;
+                padding: 4px 8px;
+            }
+
+            .ws-badge {
+                background: rgba(255, 255, 255, 0.05);
+                color: #718096;
+                border: 1px solid rgba(255, 255, 255, 0.1);
+                border-radius: 8px;
+                padding: 2px 7px;
+                font-family: 'Share Tech Mono', monospace;
+                font-size: 8pt;
+                font-weight: bold;
+                min-width: 22px;
+            }
+
+            .ws-badge-active {
+                background: rgba(82, 255, 173, 0.22);
+                color: #52ffad;
+                border: 1px solid #52ffad;
+                box-shadow: 0 0 8px rgba(82, 255, 173, 0.4);
+            }
+
+            /* Compact Mode Chips */
+            .cw-chips-box {
+                background: transparent;
+                padding: 2px;
+            }
+
+            .cw-chip-btn {
+                background: rgba(10, 24, 18, 0.85);
+                color: #ebfff7;
+                border: 1px solid rgba(82, 255, 173, 0.25);
+                border-radius: 12px;
+                padding: 3px 8px;
+                font-family: 'Share Tech Mono', monospace;
+                font-size: 8pt;
+                white-space: nowrap;
+                min-height: 26px;
+            }
+            .cw-chip-btn:hover {
+                background: rgba(82, 255, 173, 0.2);
+                border-color: #60ffb9;
+            }
+
+            .voice-status-label {
+                font-family: 'Share Tech Mono', monospace;
+                font-size: 8pt;
+                color: #8fb5ad;
+                letter-spacing: 0.1em;
+            }
         """
+        return base_css + b"\n" + extra_css
 
     def apply_css(self):
         css_provider = Gtk.CssProvider()
@@ -1411,7 +1491,9 @@ class BeautifulBenXGTK4(Adw.ApplicationWindow):
             lang = match.group(1) or ''
             code = esc_html(match.group(2).strip())
             copy_id = f"code-{int(1000*hash(code)) % 100000}"
-            return f'<span id="{copy_id}" style="background:#1a1a1a;padding:8px;border-left:3px solid #60ffb9;display:block"><button onclick="copyCode(\\'{copy_id}\\' )" style="float:right;background:#60ffb9;color:black;padding:4px 8px;border:none;border-radius:4px;cursor:pointer;font-size:9pt">Copy</button><code class="lang-{lang}" style="font-family:monospace">{code}</code></span>'
+            return (f'<span id="{copy_id}" style="background:#1a1a1a;padding:8px;border-left:3px solid #60ffb9;display:block">'
+                    f'<button onclick="copyCode(\'{copy_id}\')" style="float:right;background:#60ffb9;color:black;padding:4px 8px;border:none;border-radius:4px;cursor:pointer;font-size:9pt">Copy</button>'
+                    f'<code class="lang-{lang}" style="font-family:monospace">{code}</code></span>')
         
         text = re.sub(r'```(\w*)\n?([\s\S]*?)```', code_block, text, flags=re.MULTILINE)
         
@@ -1634,6 +1716,27 @@ class BeautifulBenXGTK4(Adw.ApplicationWindow):
         if hasattr(self, 'compact_image_label'):
             self.compact_image_label.set_text("")
 
+    def on_chip_clicked(self, text: str):
+        """Handle quick action chip clicks"""
+        mapping = {
+            "📸 Screenshot": "take a screenshot",
+            "🔒 Lock Screen": "lock the screen",
+            "📐 Save Layout": "save current layout as default",
+            "⚡ Power Saver": "set power profile to power-saver",
+            "📶 Wi-Fi Scan": "scan for wifi networks",
+            "👁️ OCR Screen": "ocr screen",
+            "Analyze screen": "analyze my screen and describe what you see",
+            "Automate task": "automate opening chrome and going to github.com",
+            "WS Terminal Type": "in workspace 1 type ls -la",
+            "Mobile ADB": "check connected mobile phone and list UI elements",
+            "Scan project": "scan my project for issues",
+            "Check resources": "check my battery and cpu usage"
+        }
+        cmd = mapping.get(text, text)
+        if hasattr(self, "input_entry") and self.input_entry:
+            self.input_entry.set_text(cmd)
+            self.on_send_clicked(None)
+
     def on_send_clicked(self, widget):
         """Handle send button click"""
         model = self.model_combo.get_active_text()
@@ -1764,6 +1867,48 @@ class BeautifulBenXGTK4(Adw.ApplicationWindow):
         step_box.append(label)
         self.chat_box.append(step_box)
         GLib.idle_add(self._scroll_chat_to_bottom)
+
+    def on_open_settings(self, widget=None):
+        from jarvis_ai.gui.settings_window import BenXSettingsWindow
+        win = BenXSettingsWindow(parent_window=self, on_settings_saved=self._on_settings_saved)
+        win.present()
+
+    def _on_settings_saved(self, settings: dict):
+        if hasattr(self, 'toast_manager'):
+            self.toast_manager.success("Settings saved & applied")
+        if "model" in settings:
+            model_short = settings["model"].split('/')[-1][:12]
+            if hasattr(self, 'top_model_badge'):
+                self.top_model_badge.set_text(f"[{model_short}]")
+
+    def _update_workspace_bar(self):
+        if not hasattr(self, 'ws_box') or not self.ws_box:
+            return True
+        try:
+            from jarvis_ai.hyprland.ipc import HyprlandIPC
+            workspaces = HyprlandIPC.get_workspaces()
+            active_win = HyprlandIPC.get_active_window()
+            active_ws = active_win.get("workspace", {}).get("id", 1) if active_win else 1
+
+            while self.ws_box.get_first_child():
+                self.ws_box.remove(self.ws_box.get_first_child())
+
+            ws_lbl = Gtk.Label(label="🖥️ WS:")
+            ws_lbl.add_css_class("ws-badge-header")
+            self.ws_box.append(ws_lbl)
+
+            for ws in sorted(workspaces, key=lambda w: (w.get("id", 0) if isinstance(w.get("id"), int) else 999)):
+                ws_id = ws.get("id")
+                ws_name = ws.get("name", str(ws_id))
+                btn = Gtk.Button(label=f" {ws_name} ")
+                btn.add_css_class("ws-badge")
+                if ws_id == active_ws:
+                    btn.add_css_class("ws-badge-active")
+                btn.connect("clicked", lambda b, wid=ws_id: HyprlandIPC.dispatch("workspace", str(wid)))
+                self.ws_box.append(btn)
+        except Exception:
+            pass
+        return True
     
     def on_clear_clicked(self, widget):
         """Clear chat"""
@@ -1865,10 +2010,57 @@ class BeautifulBenXGTK4(Adw.ApplicationWindow):
         self.cw_wake_btn.connect("clicked", self.on_wake_word_toggle)
         title_bar.append(self.cw_wake_btn)
 
+        # Expand to full dashboard button
+        expand_btn = Gtk.Button()
+        expand_icon = Gtk.Image.new_from_icon_name("view-fullscreen-symbolic")
+        expand_icon.set_pixel_size(13)
+        expand_btn.set_child(expand_icon)
+        expand_btn.add_css_class("cw-wake-btn")
+        expand_btn.set_tooltip_text("Expand to full dashboard")
+        expand_btn.connect("clicked", lambda w: self.enter_full_mode())
+        title_bar.append(expand_btn)
+
         # ── Divider ───────────────────────────────────────────────────────
         sep = Gtk.Separator()
         sep.add_css_class("cw-sep")
         root.append(sep)
+
+        # ── Mini Voice Waveform Visualizer ─────────────────────────────────
+        from jarvis_ai.gui.waveform_widget import VoiceWaveformWidget
+        self.cw_voice_waveform = VoiceWaveformWidget()
+        self.cw_voice_waveform.set_size_request(-1, 40)
+        self.cw_voice_waveform.set_margin_start(12)
+        self.cw_voice_waveform.set_margin_end(12)
+        self.cw_voice_waveform.set_margin_top(4)
+        self.cw_voice_waveform.set_margin_bottom(2)
+        root.append(self.cw_voice_waveform)
+
+        # ── Compact Quick Action Chips ─────────────────────────────────────
+        compact_chips_scroll = Gtk.ScrolledWindow()
+        compact_chips_scroll.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.NEVER)
+        compact_chips_scroll.set_min_content_height(34)
+        compact_chips_scroll.set_margin_start(10)
+        compact_chips_scroll.set_margin_end(10)
+        compact_chips_scroll.set_margin_top(2)
+        compact_chips_scroll.set_margin_bottom(4)
+        
+        compact_chips_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        compact_chips_box.add_css_class("cw-chips-box")
+        compact_chips = [
+            ("📸 Snap", "take a screenshot"),
+            ("🔒 Lock", "lock the screen"),
+            ("⚡ Eco", "set power profile to power-saver"),
+            ("📶 Wi-Fi", "scan for wifi networks"),
+            ("📐 Layout", "save current layout as default"),
+            ("👁️ OCR", "ocr screen"),
+        ]
+        for label, cmd in compact_chips:
+            btn = Gtk.Button(label=label)
+            btn.add_css_class("cw-chip-btn")
+            btn.connect("clicked", lambda b, c=cmd: self._on_compact_chip_clicked(c))
+            compact_chips_box.append(btn)
+        compact_chips_scroll.set_child(compact_chips_box)
+        root.append(compact_chips_scroll)
 
         # ── Chat scroll ───────────────────────────────────────────────────
         scroll = Gtk.ScrolledWindow()
@@ -1993,6 +2185,12 @@ class BeautifulBenXGTK4(Adw.ApplicationWindow):
         self.set_visible(True)
         self.present()
         self.log_activity("Entered full mode")
+
+    def _on_compact_chip_clicked(self, cmd: str):
+        """Execute quick action chip in compact mode"""
+        if hasattr(self, 'compact_input') and self.compact_input:
+            self.compact_input.set_text(cmd)
+            self.on_compact_send(None)
     
     def on_compact_mic_clicked(self, widget):
         if getattr(self, '_compact_listening', False):
@@ -2003,6 +2201,8 @@ class BeautifulBenXGTK4(Adw.ApplicationWindow):
         self.compact_input.set_sensitive(False)
         if hasattr(self, 'cw_status_lbl'):
             self.cw_status_lbl.set_markup("<span foreground='#ff5555'>● REC</span>")
+        if hasattr(self, 'cw_voice_waveform') and self.cw_voice_waveform:
+            self.cw_voice_waveform.set_state("recording")
         threading.Thread(target=self._compact_voice_listen, daemon=True).start()
 
     def _compact_voice_listen(self):
@@ -2021,6 +2221,8 @@ class BeautifulBenXGTK4(Adw.ApplicationWindow):
         self.compact_input.set_placeholder_text("Ask BenX...")
         if hasattr(self, 'cw_status_lbl'):
             self.cw_status_lbl.set_text("")
+        if hasattr(self, 'cw_voice_waveform') and self.cw_voice_waveform:
+            self.cw_voice_waveform.set_state("idle")
         if text:
             self.compact_input.set_text(text)
             self.log_activity(f"🎤 Voice: {text[:40]}")
@@ -2270,7 +2472,10 @@ class BeautifulBenXGTK4(Adw.ApplicationWindow):
         """Toggle wake word engine on/off"""
         if not hasattr(self, '_wake_engine') or self._wake_engine is None:
             from jarvis_ai.wake_word_engine import WakeWordEngine
-            self._wake_engine = WakeWordEngine(on_wake_word=self._on_wake_word_detected)
+            self._wake_engine = WakeWordEngine(
+                on_wake_word=self._on_wake_word_detected,
+                on_state_change=self._on_wake_state_changed
+            )
 
         if self._wake_engine.is_active():
             self._wake_engine.stop()
@@ -2281,6 +2486,7 @@ class BeautifulBenXGTK4(Adw.ApplicationWindow):
             self.cw_wake_btn.remove_css_class("cw-wake-btn-active")
             if hasattr(self, 'cw_status_lbl'):
                 self.cw_status_lbl.set_text("")
+            self._apply_wake_state("idle")
             self.add_compact_message("BenX", "Wake word disabled.")
             self.log_activity("Wake word disabled")
         else:
@@ -2296,6 +2502,28 @@ class BeautifulBenXGTK4(Adw.ApplicationWindow):
                 self.log_activity("Wake word enabled")
             else:
                 self.add_compact_message("BenX", result)
+
+    def _on_wake_state_changed(self, state: str):
+        """Thread-safe state change handler from WakeWordEngine"""
+        GLib.idle_add(self._apply_wake_state, state)
+
+    def _apply_wake_state(self, state: str):
+        """Update waveform animation and indicators based on wake word state"""
+        if hasattr(self, 'voice_waveform') and self.voice_waveform:
+            self.voice_waveform.set_state(state)
+        if hasattr(self, 'cw_voice_waveform') and self.cw_voice_waveform:
+            self.cw_voice_waveform.set_state(state)
+        if hasattr(self, 'cw_status_lbl') and self.cw_status_lbl:
+            color_map = {
+                "idle": "#718096",
+                "listening": "#48bb78",
+                "detected": "#ecc94b",
+                "recording": "#f56565",
+                "thinking": "#9f7aea"
+            }
+            c = color_map.get(state, "#48bb78")
+            self.cw_status_lbl.set_markup(f"<span foreground='{c}'>&#9679; {state.upper()}</span>")
+        return False
 
     def _on_wake_word_detected(self, command: str):
         """Called from wake word thread when 'BenX' is heard"""
@@ -2656,19 +2884,28 @@ class BeautifulBenXGTK4(Adw.ApplicationWindow):
         self.log_activity(f"Restored to {previous} mode")
 
 
-class BeautifulBenXGTK4App(Adw.Application):
+class BeautifulBenXGTK4App:
     def __init__(self, jarvis_instance):
-        super().__init__(application_id='com.benx.beautiful')
         self.jarvis = jarvis_instance
         self.window = None
-    
-    def do_activate(self):
-        if not self.window:
-            self.window = BeautifulBenXGTK4(self.jarvis, application=self)
-        self.window.present()
-    
+
     def run_app(self):
-        self.run(None)
+        loop = GLib.MainLoop()
+
+        def _start():
+            self.window = BeautifulBenXGTK4(
+                self.jarvis,
+                application=Adw.Application(
+                    application_id='com.benx.beautiful',
+                    flags=Gio.ApplicationFlags.NON_UNIQUE
+                )
+            )
+            self.window.present()
+            self.window.connect('destroy', lambda w: loop.quit())
+            return False  # don't repeat
+
+        GLib.idle_add(_start)
+        loop.run()
 
 
 def create_beautiful_gtk4_ui(jarvis_instance):

@@ -3,13 +3,12 @@ BenX GTK4 UI - Native Wayland support with screen recording exclusion
 """
 import sys
 
-# CRITICAL: Prevent any GTK3 imports
-if 'gi.repository.Gtk' in sys.modules:
-    raise RuntimeError("GTK already loaded. Cannot load GTK4. Please restart.")
-
 import gi
-gi.require_version('Gtk', '4.0')
-gi.require_version('Adw', '1')
+try:
+    gi.require_version('Gtk', '4.0')
+    gi.require_version('Adw', '1')
+except Exception:
+    pass
 from gi.repository import Gtk, Adw, GLib, Gdk
 import threading
 import logging

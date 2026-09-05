@@ -352,7 +352,23 @@ class AIEngine:
                    use_vision: bool = False,
                    task_type: Optional[str] = None,
                    stream: bool = False) -> Union[str, Generator[str, None, None]]:
-        """Query Groq API. Returns str normally, or delegates to stream generator."""
+        """Query Groq or OpenRouter API. Returns str normally, or delegates to stream generator."""
+        # ── Route to OpenRouter if model has a provider prefix or if GROQ_KEY is absent ──
+        use_openrouter = bool(
+            (model_preference and ("/" in model_preference and not model_preference.startswith("groq/"))) or
+            (not Config.GROQ_KEY and Config.OPENROUTER_KEY)
+        )
+        if use_openrouter:
+            return AIEngine.query_openrouter(
+                system_prompt, user_prompt,
+                model_preference=model_preference,
+                conversation_context=conversation_context,
+                image_path=image_path,
+                use_vision=use_vision,
+                task_type=task_type,
+                stream=stream,
+            )
+
         if stream:
             return AIEngine._query_groq_stream(
                 system_prompt, user_prompt,
@@ -364,20 +380,34 @@ class AIEngine:
             )
         # ── non-streaming path always returns str ──────────────────────────
         if not Config.GROQ_KEY:
-            return "\u274c Missing GROQ_API_KEY. Set it in your environment before running."
+            if Config.OPENROUTER_KEY:
+                return AIEngine.query_openrouter(
+                    system_prompt, user_prompt,
+                    model_preference=model_preference,
+                    conversation_context=conversation_context,
+                    image_path=image_path,
+                    use_vision=use_vision,
+                    task_type=task_type,
+                    stream=False,
+                )
+            return "❌ Missing GROQ_API_KEY and OPENROUTER_API_KEY. Set it in .env before running."
         if task_type is None:
             task_type = AIEngine._detect_task_type(user_prompt, use_vision)
         route = Config.MODEL_ROUTES.get(task_type, Config.MODEL_ROUTES["chat"])
         models = list(dict.fromkeys(route + Config.MODELS))
+        # Keep native Groq models for query_groq
+        models = [m for m in models if "/" not in m or m.startswith("groq/")]
+        if not models:
+            models = ["llama-3.3-70b-versatile", "llama-3.1-8b-instant"]
         if model_preference and model_preference in models:
             models.remove(model_preference)
             models.insert(0, model_preference)
-        logger.info(f"\U0001f9e0 Task type: {task_type} \u2192 primary model: {models[0]}")
+        logger.info(f"🧠 Task type: {task_type} → primary model: {models[0]}")
 
         # Multi-model voting for reasoning tasks (when not streaming)
         voting_enabled = getattr(Config, "MULTI_MODEL_VOTING_ENABLED", True)
         if task_type == "reason" and voting_enabled and not stream and not use_vision:
-            logger.info("\U0001f5f3\ufe0f  Using multi-model voting for reasoning task")
+            logger.info("🗳️  Using multi-model voting for reasoning task")
             return AIEngine._multi_model_query(
                 system_prompt, user_prompt,
                 models=models,
@@ -419,7 +449,7 @@ class AIEngine:
                 response.raise_for_status()
                 result = response.json()
                 if "choices" in result and result["choices"]:
-                    logger.info(f"\u2705 Used model: {model}")
+                    logger.info(f"✅ Used Groq model: {model}")
                     return result["choices"][0]["message"]["content"]
                 failed_models.append(model)
             except requests.exceptions.Timeout:
@@ -428,14 +458,183 @@ class AIEngine:
             except requests.exceptions.HTTPError as e:
                 code = e.response.status_code
                 if code == 401:
-                    return "\u274c Authentication failed. Please check your Groq API key."
+                    logger.warning("Groq authentication failed; trying OpenRouter fallback...")
+                    break
                 logger.warning(f"Model {model} HTTP {code}")
                 failed_models.append(model)
             except Exception as e:
                 logger.warning(f"Model {model} failed: {str(e)[:100]}")
                 failed_models.append(model)
-        return (f"\u274c All {len(models)} AI models failed. "
-                "Check your GROQ_API_KEY and connection.")
+
+        # Fallback to OpenRouter if configured
+        if Config.OPENROUTER_KEY:
+            logger.info("Groq failed or unavailable. Falling back to OpenRouter...")
+            return AIEngine.query_openrouter(
+                system_prompt, user_prompt,
+                model_preference="meta-llama/llama-3.3-70b-instruct",
+                conversation_context=conversation_context,
+                image_path=image_path,
+                use_vision=use_vision,
+                task_type=task_type,
+                stream=False
+            )
+
+        return (f"❌ All {len(models)} AI models failed. "
+                "Check your GROQ_API_KEY / OPENROUTER_API_KEY and connection.")
+
+    @staticmethod
+    def query_openrouter(system_prompt: str, user_prompt: str,
+                          model_preference: Optional[str] = None,
+                          conversation_context: List[Dict] = None,
+                          image_path: Optional[str] = None,
+                          use_vision: bool = False,
+                          task_type: Optional[str] = None,
+                          stream: bool = False) -> Union[str, Generator[str, None, None]]:
+        """Query OpenRouter API (supports Meta, DeepSeek, Google, Anthropic, Qwen, etc.)."""
+        if stream:
+            return AIEngine._query_openrouter_stream(
+                system_prompt, user_prompt,
+                model_preference=model_preference,
+                conversation_context=conversation_context,
+                image_path=image_path,
+                use_vision=use_vision,
+                task_type=task_type,
+            )
+
+        if not Config.OPENROUTER_KEY:
+            return "❌ Missing OPENROUTER_API_KEY. Configure .env with your OpenRouter key."
+
+        if task_type is None:
+            task_type = AIEngine._detect_task_type(user_prompt, use_vision)
+
+        openrouter_defaults = [
+            "meta-llama/llama-3.3-70b-instruct",
+            "deepseek/deepseek-r1",
+            "google/gemini-2.0-flash-001",
+            "qwen/qwen-2.5-72b-instruct",
+            "anthropic/claude-3.5-sonnet",
+        ]
+        route = Config.MODEL_ROUTES.get(task_type, openrouter_defaults)
+        models = [m for m in (route + Config.MODELS) if "/" in m and not m.startswith("groq/")]
+        if not models:
+            models = openrouter_defaults
+        for d in openrouter_defaults:
+            if d not in models:
+                models.append(d)
+
+        if model_preference:
+            if model_preference in models:
+                models.remove(model_preference)
+            models.insert(0, model_preference)
+
+        logger.info(f"🌐 OpenRouter task: {task_type} → primary model: {models[0]}")
+
+        headers = {
+            "Authorization": f"Bearer {Config.OPENROUTER_KEY}",
+            "HTTP-Referer": Config.OPENROUTER_REFERER,
+            "X-Title": Config.OPENROUTER_TITLE,
+            "Content-Type": "application/json"
+        }
+        messages = [{"role": "system", "content": system_prompt}]
+        if conversation_context:
+            messages.extend(conversation_context[-30:])
+
+        user_message_content = user_prompt
+        if use_vision and image_path and IMAGE_AVAILABLE:
+            base64_image = AIEngine.encode_image(image_path)
+            if base64_image:
+                user_message_content = [
+                    {"type": "text", "text": user_prompt},
+                    {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{base64_image}"}}
+                ]
+        messages.append({"role": "user", "content": user_message_content})
+
+        failed = []
+        for model in models:
+            try:
+                data = {
+                    "model": model,
+                    "messages": messages,
+                    "temperature": 0.7,
+                    "max_tokens": 4000,
+                    "top_p": 0.9,
+                    "stream": False
+                }
+                response = requests.post(
+                    Config.OPENROUTER_API_URL,
+                    headers=headers,
+                    json=data,
+                    timeout=Config.API_TIMEOUT
+                )
+                if response.status_code == 200:
+                    r = response.json()
+                    if "choices" in r and r["choices"]:
+                        logger.info(f"✅ Used OpenRouter model: {model}")
+                        return r["choices"][0]["message"]["content"]
+                failed.append(f"{model} (HTTP {response.status_code})")
+            except Exception as e:
+                logger.warning(f"OpenRouter model {model} error: {e}")
+                failed.append(f"{model} ({str(e)[:60]})")
+
+        return f"❌ OpenRouter models failed: {', '.join(failed[:3])}"
+
+    @staticmethod
+    def _query_openrouter_stream(system_prompt: str, user_prompt: str,
+                                 model_preference: Optional[str] = None,
+                                 conversation_context: List[Dict] = None,
+                                 image_path: Optional[str] = None,
+                                 use_vision: bool = False,
+                                 task_type: Optional[str] = None) -> Generator[str, None, None]:
+        """Streaming generator for OpenRouter SSE."""
+        if not Config.OPENROUTER_KEY:
+            yield "❌ Missing OPENROUTER_API_KEY."
+            return
+
+        model = model_preference or "meta-llama/llama-3.3-70b-instruct"
+        headers = {
+            "Authorization": f"Bearer {Config.OPENROUTER_KEY}",
+            "HTTP-Referer": Config.OPENROUTER_REFERER,
+            "X-Title": Config.OPENROUTER_TITLE,
+            "Content-Type": "application/json"
+        }
+        messages = [{"role": "system", "content": system_prompt}]
+        if conversation_context:
+            messages.extend(conversation_context[-30:])
+        messages.append({"role": "user", "content": user_prompt})
+
+        try:
+            data = {
+                "model": model,
+                "messages": messages,
+                "temperature": 0.7,
+                "max_tokens": 4000,
+                "top_p": 0.9,
+                "stream": True
+            }
+            response = requests.post(
+                Config.OPENROUTER_API_URL,
+                headers=headers,
+                json=data,
+                timeout=Config.API_TIMEOUT,
+                stream=True
+            )
+            response.raise_for_status()
+            for line in response.iter_lines():
+                if line:
+                    line = line.decode("utf-8")
+                    if line.startswith("data: "):
+                        chunk = line[6:]
+                        if chunk.strip() == "[DONE]":
+                            break
+                        try:
+                            delta = json.loads(chunk)["choices"][0]["delta"].get("content", "")
+                            if delta:
+                                yield delta
+                        except Exception:
+                            continue
+            return
+        except Exception as e:
+            yield f"❌ OpenRouter stream error: {e}"
 
     @staticmethod
     def _query_groq_stream(system_prompt: str, user_prompt: str,
@@ -446,7 +645,17 @@ class AIEngine:
                            task_type: Optional[str] = None) -> Generator[str, None, None]:
         """Streaming variant of query_groq — yields text chunks."""
         if not Config.GROQ_KEY:
-            yield "\u274c Missing GROQ_API_KEY."
+            if Config.OPENROUTER_KEY:
+                yield from AIEngine._query_openrouter_stream(
+                    system_prompt, user_prompt,
+                    model_preference=model_preference,
+                    conversation_context=conversation_context,
+                    image_path=image_path,
+                    use_vision=use_vision,
+                    task_type=task_type
+                )
+                return
+            yield "❌ Missing GROQ_API_KEY and OPENROUTER_API_KEY."
             return
         headers = {
             "Authorization": f"Bearer {Config.GROQ_KEY}",
@@ -497,10 +706,12 @@ class AIEngine:
                 continue
         yield "\u274c All models failed for streaming."
     
-    def agent_run(self, user_goal: str, confirm_cb=None, on_step_cb=None) -> Optional[str]:
+    def agent_run(self, user_goal: str, confirm_cb=None, on_step_cb=None, model: Optional[str] = None) -> Optional[str]:
         """Run agentic loop. Returns None if goal is simple."""
         agent = self._get_agent()
         agent.on_step_cb = on_step_cb
+        if model and hasattr(agent, "model"):
+            agent.model = model
         result = agent.run(user_goal, confirm_cb=confirm_cb)
         if result:
             self.conversation_history.append({"role": "user", "content": user_goal})
@@ -514,7 +725,7 @@ class AIEngine:
                 )
         return result
 
-    def chat(self, user_input: str, system_context: str = None, image_path: Optional[str] = None) -> str:
+    def chat(self, user_input: str, system_context: str = None, image_path: Optional[str] = None, model: Optional[str] = None) -> str:
         """Chat with AI using full context: RAG + memory + workspace + vision"""
 
         # RAG context
@@ -579,6 +790,7 @@ CONTEXT RULES:
             conversation_context=self.conversation_history,
             image_path=image_path,
             use_vision=use_vision,
+            model_preference=model,
             task_type=task_type
         )
 
@@ -663,7 +875,7 @@ Structure response:
             return "System state: Available"
     
     @staticmethod
-    def interpret_command(text: str, conversation_context: List[Dict] = None, learning_engine=None) -> str:
+    def interpret_command(text: str, conversation_context: List[Dict] = None, learning_engine=None, model: Optional[str] = None) -> str:
         """Convert natural language to JSON command"""
         from jarvis_ai.learning import LearningEngine
         
@@ -832,6 +1044,48 @@ WORKSPACE / WINDOW MANAGEMENT (Hyprland):
 - close_active_window: "close window", "close this", "kill window"
 - toggle_fullscreen: "fullscreen", "toggle fullscreen"
 - toggle_float: "float window", "toggle float"
+- hypr_move_window: "move window left/right/up/down", "move this window right" → direction=left|right|up|down
+- hypr_resize_window: "resize window grow/shrink", "make window larger/smaller/wider" → delta=grow|shrink|wider|narrower
+- hypr_tile_all: "tile all windows", "tile workspace", "unfloat all windows"
+- hypr_toggle_pin: "pin window", "pin this window", "unpin window"
+- hypr_toggle_group: "group windows", "tab windows", "toggle group"
+- hypr_cycle_group: "next tab in group", "previous tab in group", "cycle group" → direction=f|b
+- hypr_save_layout: "save this layout as X", "save layout as work", "save current layout as coding" → name=layout_name
+- hypr_restore_layout: "restore layout X", "restore work layout", "load layout X" → name=layout_name
+- hypr_list_layouts: "list layouts", "show saved layouts", "what layouts do I have"
+- hypr_delete_layout: "delete layout X", "remove layout X" → name=layout_name
+- hypr_cycle_workspaces: "next workspace", "previous workspace", "cycle workspace" → direction=next|prev
+- hypr_move_to_special: "move to special workspace", "send to scratchpad" → name=special_name
+- hypr_toggle_special: "toggle special workspace", "show scratchpad", "toggle scratchpad" → name=special_name
+- hypr_list_monitors: "list monitors", "show screens", "display info", "what monitors are connected"
+- hypr_apply_monitor_profile: "switch to docked layout", "docked profile", "undocked profile", "laptop screen only" → profile=docked|undocked
+- hypr_screenshot_region: "screenshot region", "crop screenshot", "select area screenshot", "snipping tool"
+- hypr_screenshot_window: "screenshot active window", "window screenshot", "capture this window"
+- hypr_start_recording: "record screen", "start screen recording", "start recording" → audio=true|false
+- hypr_stop_recording: "stop recording", "stop screen recording", "finish recording"
+- hypr_clipboard_history: "clipboard history", "show cliphist", "past clips", "recent clipboard" → value=count
+- hypr_clipboard_search: "search clipboard for X", "find in clipboard X" → query=search_term
+- hypr_clipboard_paste: "paste clipboard item X" → value=item_id
+- hypr_add_window_rule: "add window rule float for X", "always float X", "make X float by default" → rule=float on, target=app_name, match_type=class|title
+
+FULL LAPTOP CONTROL:
+- power_profile: "power profile", "set power profile to power-saver/balanced/performance", "battery saver mode", "performance mode" → profile=power-saver|balanced|performance
+- wifi_list: "list wifi", "show wifi networks", "available wifi", "scan wifi"
+- wifi_connect: "connect to wifi SSID", "join wifi SSID" → ssid=network_name, password=optional_password
+- wifi_disconnect: "disconnect wifi", "turn off wifi connection"
+- wifi_forget: "forget wifi SSID", "delete wifi SSID" → ssid=network_name
+- vpn_list: "list vpn", "show vpns"
+- vpn_toggle: "toggle vpn", "connect vpn X", "disconnect vpn X" → name=vpn_name
+- network_info: "network info", "ip address", "connection status", "what is my ip"
+- process_top: "top processes", "what's using the most cpu", "heavy processes", "ram hogs" → sort_by=cpu|memory
+- process_kill: "kill process X", "terminate X", "kill pid 1234" → process=name_or_pid
+- pkg_search: "search package X", "find package X in pacman" → package=name
+- pkg_check_updates: "check updates", "any system updates", "pending packages"
+- pkg_install: "install package X", "pacman install X", "yay install X" → package=name
+- pkg_update_system: "update system", "upgrade all packages", "pacman -Syu"
+- file_trash: "trash file X", "delete file X to trash", "send X to trash" → path=file_path
+- service_status: "service status X", "is service X running", "status of X.service" → service=service_name
+- service_manage: "start service X", "stop service X", "restart service X", "enable service X" → service=service_name, action=start|stop|restart|enable|disable
 
 SELF-AWARENESS RULE:
 - Questions like "which workspace are you on", "where are you running", "in which workspace are you" → {"command":"find_app_workspace","app":"benx"}
@@ -874,7 +1128,7 @@ IMPORTANT:
             context_messages = conversation_context[-5:]
         
         try:
-            return AIEngine.query_groq(system_prompt, text, conversation_context=context_messages)
+            return AIEngine.query_groq(system_prompt, text, conversation_context=context_messages, model_preference=model)
         except Exception as e:
             logger.error(f"Command interpretation failed: {e}")
             return json.dumps({"command": "none"})

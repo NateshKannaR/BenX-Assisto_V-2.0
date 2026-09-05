@@ -1,0 +1,34 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0a151b"/>
+      <stop offset="50%" stop-color="#0e2329"/>
+      <stop offset="100%" stop-color="#051014"/>
+    </linearGradient>
+    <linearGradient id="cyanGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#00f2fe"/>
+      <stop offset="100%" stop-color="#4facfe"/>
+    </linearGradient>
+    <linearGradient id="neonGreen" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#00f5a0"/>
+      <stop offset="100%" stop-color="#00d9f5"/>
+    </linearGradient>
+    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="3" result="blur" />
+      <feComposite in="SourceGraphic" in2="blur" operator="over"/>
+    </filter>
+  </defs>
+  <!-- Squircle Base -->
+  <rect x="8" y="8" width="112" height="112" rx="28" fill="url(#bgGrad)" stroke="#1a3d46" stroke-width="2"/>
+  
+  <!-- Outer Circuit Rings -->
+  <circle cx="64" cy="64" r="42" fill="none" stroke="#16434d" stroke-width="1.5" stroke-dasharray="8 6"/>
+  <circle cx="64" cy="64" r="32" fill="none" stroke="url(#cyanGrad)" stroke-width="2" opacity="0.6"/>
+
+  <!-- Hexagon Core -->
+  <polygon points="64,36 88,50 88,78 64,92 40,78 40,50" fill="#07191e" stroke="url(#neonGreen)" stroke-width="2.5" filter="url(#glow)"/>
+
+  <!-- BenX Stylized Glyph 'B' & 'X' Center -->
+  <path d="M52 48 L64 64 L52 80 M76 48 L64 64 L76 80" fill="none" stroke="url(#cyanGrad)" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="64" cy="64" r="5" fill="#00f5a0" filter="url(#glow)"/>
+</svg>

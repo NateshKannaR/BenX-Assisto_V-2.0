@@ -64,23 +64,45 @@ class MobileAutomationEngine:
         return [line.replace('package:', '') for line in result.splitlines() if 'package:' in line]
 
     def list_ui_elements(self, text_query: str = None) -> List[Dict]:
-        '''Dump UI hierarchy and search'''
+        '''Dump UI hierarchy and search elements by text, resource-id, or content-desc'''
         if not self.device:
             return []
-        dump = self.device.shell('uiautomator dump /sdcard/ui.xml')
-        if 'error' in dump.lower():
+        self.device.shell('uiautomator dump /sdcard/ui.xml')
+        xml_content = self.device.shell('cat /sdcard/ui.xml')
+        if not xml_content or '<hierarchy' not in xml_content:
             return []
-        # Parse xml (simple regex for demo, improve with lxml)
+        import xml.etree.ElementTree as ET
         import re
         elements = []
-        for match in re.finditer(r' text="([^"]*)".*bounds="\\[(\\d+),(\\d+)\\]\\[(\\d+),(\\d+)\\]"', dump):
-            text, x1, y1, x2, y2 = match.groups()
-            if not text_query or text_query.lower() in text.lower():
-                elements.append({
-                    'text': text,
-                    'bounds': [int(x1), int(y1), int(x2), int(y2)],
-                    'center': [int((int(x1)+int(x2))/2), int((int(y1)+int(y2))/2)]
-                })
+        try:
+            root = ET.fromstring(xml_content)
+            for node in root.iter('node'):
+                text = node.attrib.get('text', '').strip()
+                desc = node.attrib.get('content-desc', '').strip()
+                res_id = node.attrib.get('resource-id', '').strip()
+                bounds_str = node.attrib.get('bounds', '')
+                
+                label = text or desc or res_id
+                if not label:
+                    continue
+                
+                m = re.match(r'\[(\d+),(\d+)\]\[(\d+),(\d+)\]', bounds_str)
+                if not m:
+                    continue
+                x1, y1, x2, y2 = map(int, m.groups())
+                center_x, center_y = (x1 + x2) // 2, (y1 + y2) // 2
+
+                if not text_query or (text_query.lower() in label.lower()):
+                    elements.append({
+                        'text': text,
+                        'content_desc': desc,
+                        'resource_id': res_id,
+                        'label': label,
+                        'bounds': [x1, y1, x2, y2],
+                        'center': [center_x, center_y]
+                    })
+        except Exception:
+            pass
         return elements
 
     def tap(self, x: int = None, y: int = None, text: str = None) -> str:
@@ -165,7 +187,7 @@ Return JSON list: [{{"action": "tap", "text": "send", "description": "tap send"}
             for a in actions:
                 act = a.get('action', '')
                 if act == 'tap':
-                    preview.append(f'👀 Tap "{a.get("text","?")}" at {a.get("x",?)}')
+                    preview.append(f'👀 Tap "{a.get("text","?")}" at {a.get("x","?")},{a.get("y","?")}')
                 # Add more...
             return '\\n'.join(preview)
         except:

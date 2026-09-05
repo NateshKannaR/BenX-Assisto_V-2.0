@@ -12,35 +12,54 @@ class Config:
     MONGODB_URI = os.getenv("MONGODB_URI", "mongodb+srv://Natesh:Natesh@cluster0.wwp3oig.mongodb.net/?retryWrites=true&w=majority")
     DATABASE_NAME = "benx"
     
-# API Configuration (Multi-provider)
-    # Set environment variables:
-    # export GROQ_API_KEY='...'
-    # export OPENAI_API_KEY='...'
-    # export OLLAMA_URL='http://localhost:11434'
+    # Auto-load .env file if present
+    for _p in [Path.cwd() / ".env", Path(__file__).parent.parent / ".env", Path.home() / ".benx" / ".env"]:
+        if _p.exists():
+            try:
+                with open(_p, "r", encoding="utf-8") as _f:
+                    for _line in _f:
+                        _line = _line.strip()
+                        if _line and not _line.startswith("#") and "=" in _line:
+                            _k, _v = _line.split("=", 1)
+                            _k, _v = _k.strip(), _v.strip().strip("'\"")
+                            if _k and _k not in os.environ:
+                                os.environ[_k] = _v
+            except Exception:
+                pass
+            break
+
+    # API Configuration (Multi-provider)
     GROQ_KEY = os.getenv("GROQ_API_KEY", os.getenv("GROQ_KEY", "")).strip()
+    OPENROUTER_KEY = os.getenv("OPENROUTER_API_KEY", os.getenv("OPENROUTER_KEY", "")).strip()
     OPENAI_KEY = os.getenv("OPENAI_API_KEY", "").strip()
     OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434")
+
+    OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions"
+    OPENROUTER_REFERER = "https://github.com/NateshKannaR/BenX-AI"
+    OPENROUTER_TITLE = "BenX-AI"
     
     # ── Model routing: task-type → best model ──────────────────────
     MODELS = [
+        "meta-llama/llama-3.3-70b-instruct",
         "llama-3.3-70b-versatile",
         "llama-3.1-8b-instant",
+        "deepseek/deepseek-r1",
+        "google/gemini-2.0-flash-001",
+        "qwen/qwen-2.5-72b-instruct",
+        "anthropic/claude-3.5-sonnet",
         "groq/compound",
         "groq/compound-mini",
         "qwen/qwen3-32b",
         "meta-llama/llama-4-scout-17b-16e-instruct",
-        "openai/gpt-oss-120b",
-        "openai/gpt-oss-20b",
-        "moonshotai/kimi-k2-instruct",
     ]
 
     # Ordered fallback lists per task type
     MODEL_ROUTES = {
-        "vision":  ["meta-llama/llama-4-scout-17b-16e-instruct", "llama-3.3-70b-versatile", "groq/compound"],
-        "code":    ["qwen/qwen3-32b", "openai/gpt-oss-120b", "llama-3.3-70b-versatile"],
-        "chat":    ["llama-3.3-70b-versatile", "groq/compound", "llama-3.1-8b-instant"],
-        "fast":    ["llama-3.1-8b-instant", "groq/compound-mini", "llama-3.3-70b-versatile"],
-        "reason":  ["openai/gpt-oss-120b", "moonshotai/kimi-k2-instruct", "llama-3.3-70b-versatile"],
+        "vision":  ["google/gemini-2.0-flash-001", "meta-llama/llama-4-scout-17b-16e-instruct", "meta-llama/llama-3.3-70b-instruct", "llama-3.3-70b-versatile"],
+        "code":    ["qwen/qwen-2.5-72b-instruct", "meta-llama/llama-3.3-70b-instruct", "qwen/qwen3-32b", "llama-3.3-70b-versatile"],
+        "chat":    ["meta-llama/llama-3.3-70b-instruct", "llama-3.3-70b-versatile", "llama-3.1-8b-instant", "groq/compound"],
+        "fast":    ["meta-llama/llama-3.3-70b-instruct", "llama-3.1-8b-instant", "groq/compound-mini"],
+        "reason":  ["deepseek/deepseek-r1", "meta-llama/llama-3.3-70b-instruct", "llama-3.3-70b-versatile"],
     }
 
     API_URL = "https://api.groq.com/openai/v1/chat/completions"

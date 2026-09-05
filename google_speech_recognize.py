@@ -30,6 +30,4 @@ def main() -> None:
         print(f"❌  Transcription error: {err}")
 
 if __name__ == "__main__":
-    main()""")
-
-Action: python_run("python google_speech_recognize.py
+    main()

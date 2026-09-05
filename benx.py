@@ -107,17 +107,48 @@ class BenX:
     
     def run(self):
         """Main application loop"""
-        if self.use_gui:
-            print("🎯 Starting BenX with Beautiful GTK4 UI...")
+        if "--tui" in sys.argv or "-t" in sys.argv:
+            from benx_tui import BenXTUI
+            BenXTUI().run()
+            return
+
+        if "--gtk" in sys.argv or "--gtk4" in sys.argv:
             try:
-                from jarvis_ai.gui import beautiful_gtk4
-                app = beautiful_gtk4.create_beautiful_gtk4_ui(self)
+                from jarvis_ai.gui.beautiful_gtk4 import BeautifulBenXGTK4App
+                app = BeautifulBenXGTK4App(self)
                 app.run_app()
+                return
             except Exception as e:
-                logger.error(f"Beautiful GTK4 UI failed: {e}")
-                print(f"❌ GTK4 failed to start: {e}")
-                print("Falling back to CLI mode...")
-                self.run_cli()
+                logger.error(f"GTK4 failed: {e}")
+                print(f"⚠️ GTK4 failed to launch ({e}), launching upgraded TUI...")
+                from benx_tui import BenXTUI
+                BenXTUI().run()
+                return
+
+        if self.use_gui:
+            print("🚀 Starting BenX Web UI at http://localhost:8000")
+            print("   Open your browser to http://localhost:8000")
+            try:
+                import subprocess
+                src_main = Path(__file__).parent / 'src' / 'main.py'
+                subprocess.Popen(
+                    [sys.executable, str(src_main)],
+                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+                )
+                import time
+                time.sleep(1.5)
+                subprocess.Popen(
+                    ['xdg-open', 'http://localhost:8000'],
+                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+                )
+                # Keep alive
+                while self.running:
+                    time.sleep(1)
+            except Exception as e:
+                logger.error(f"Web UI failed: {e}")
+                print(f"⚠️ Web UI failed ({e}), launching upgraded TUI...")
+                from benx_tui import BenXTUI
+                BenXTUI().run()
         else:
             self.run_cli()
     

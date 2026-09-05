@@ -97,12 +97,14 @@
         <div class="control-group" id="modelSelectorGroup">
           <label class="control-label" for="modelSelect">Model</label>
           <select id="modelSelect" class="control-select" title="Select AI Model">
-            <option value="">Auto (Best)</option>
-            <option value="llama-3.3-70b-versatile">Llama 3.3 70B</option>
-            <option value="llama-3.1-8b-instant">Llama 3.1 8B Fast</option>
-            <option value="qwen/qwen3-32b">Qwen3 32B</option>
-            <option value="groq/compound">Compound</option>
-            <option value="meta-llama/llama-4-scout-17b-16e-instruct">Llama 4 Scout (Vision)</option>
+            <option value="meta-llama/llama-3.3-70b-instruct">Llama 3.3 70B (OpenRouter)</option>
+            <option value="deepseek/deepseek-r1">DeepSeek R1 (OpenRouter)</option>
+            <option value="google/gemini-2.0-flash-001">Gemini 2.0 Flash (OpenRouter)</option>
+            <option value="qwen/qwen-2.5-72b-instruct">Qwen 2.5 72B (OpenRouter)</option>
+            <option value="anthropic/claude-3.5-sonnet">Claude 3.5 Sonnet (OpenRouter)</option>
+            <option value="llama-3.3-70b-versatile">Llama 3.3 70B (Groq)</option>
+            <option value="llama-3.1-8b-instant">Llama 3.1 8B Fast (Groq)</option>
+            <option value="groq/compound">Compound (Groq)</option>
           </select>
         </div>
 
@@ -298,17 +300,23 @@
 
         <!-- Suggestion chips -->
         <div class="suggestions" role="group" aria-label="Quick commands">
+          <button class="suggestion-chip" id="chip-screen" data-command="analyze my screen and describe what you see">
+            <svg class="chip-icon" aria-hidden="true"><use href="#icon-eye"></use></svg>Analyze screen
+          </button>
+          <button class="suggestion-chip" id="chip-automate" data-command="automate opening chrome and going to github.com">
+            <svg class="chip-icon" aria-hidden="true"><use href="#icon-bolt"></use></svg>Desktop Automate
+          </button>
+          <button class="suggestion-chip" id="chip-terminal" data-command="in workspace 1 type ls -la">
+            <svg class="chip-icon" aria-hidden="true"><use href="#icon-stream"></use></svg>WS Terminal Type
+          </button>
+          <button class="suggestion-chip" id="chip-mobile" data-command="check connected mobile phone and list UI elements">
+            <svg class="chip-icon" aria-hidden="true"><use href="#icon-queue"></use></svg>Mobile ADB
+          </button>
           <button class="suggestion-chip" id="chip-scan" data-command="scan my project for issues">
             <svg class="chip-icon" aria-hidden="true"><use href="#icon-scan"></use></svg>Scan project
           </button>
           <button class="suggestion-chip" id="chip-resources" data-command="check my battery and cpu usage">
-            <svg class="chip-icon" aria-hidden="true"><use href="#icon-cpu"></use></svg>Check resources
-          </button>
-          <button class="suggestion-chip" id="chip-automate" data-command="help me automate a repetitive task">
-            <svg class="chip-icon" aria-hidden="true"><use href="#icon-bolt"></use></svg>Automate task
-          </button>
-          <button class="suggestion-chip" id="chip-screen" data-command="analyze my screen and describe what you see">
-            <svg class="chip-icon" aria-hidden="true"><use href="#icon-eye"></use></svg>Analyze screen
+            <svg class="chip-icon" aria-hidden="true"><use href="#icon-cpu"></use></svg>Telemetry
           </button>
         </div>
 
