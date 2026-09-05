@@ -23,7 +23,7 @@ CRITICAL_PROCESSES = {
 }
 
 CRITICAL_SERVICES = {
-    "systemd", "dbus", "NetworkManager", "sshd", "polkit", "display-manager"
+    "systemd", "dbus", "NetworkManager", "sshd", "polkit", "display-manager", "systemd-logind", "logind"
 }
 
 
@@ -332,6 +332,8 @@ class ProcessManager:
         """
         import psutil
         target_str = str(target).lower().strip()
+        if target_str in CRITICAL_PROCESSES:
+            return False, f"🛑 Blocked: Terminating critical process '{target_str}' is prohibited."
 
         # If numerical PID
         if target_str.isdigit():

@@ -34,6 +34,7 @@ class CommandExecutor:
         "shutdown",
         "power_shutdown",
         "restart",
+        "reboot",
         "power_reboot",
         "suspend",
         "power_suspend",
@@ -339,11 +340,13 @@ class CommandExecutor:
 
                 # Laptop Control
                 "power_profile": lambda: CommandEngine.power_profile(obj.get("profile")),
+                "power_set_profile": lambda: CommandEngine.power_profile(obj.get("profile")),
                 "power_suspend": lambda: CommandEngine.suspend(),
                 "power_hibernate": lambda: CommandEngine.power_hibernate(),
                 "power_reboot": lambda: CommandEngine.restart(),
                 "power_shutdown": lambda: CommandEngine.shutdown(),
                 "wifi_list": lambda: CommandEngine.wifi_list(),
+                "wifi_scan": lambda: CommandEngine.wifi_list(),
                 "wifi_connect": lambda: CommandEngine.wifi_connect(obj.get("ssid", ""), obj.get("password")),
                 "wifi_disconnect": lambda: CommandEngine.wifi_disconnect(),
                 "wifi_forget": lambda: CommandEngine.wifi_forget(obj.get("ssid", "")),
