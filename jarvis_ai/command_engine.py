@@ -1479,6 +1479,252 @@ class CommandEngine:
         eng = MobileAutomationEngine(ai)
         return eng.automate(instruction)
 
+    # ── Hyprland Automation Layer ─────────────────────────────────────────────
 
+    @staticmethod
+    def hypr_move_window(direction: str) -> str:
+        from jarvis_ai.hyprland.window import WindowManager
+        return WindowManager.move_active(direction)
 
+    @staticmethod
+    def hypr_resize_window(delta: str) -> str:
+        from jarvis_ai.hyprland.window import WindowManager
+        return WindowManager.resize_active(delta)
 
+    @staticmethod
+    def hypr_tile_all(ws_id: Optional[int] = None) -> str:
+        from jarvis_ai.hyprland.window import WindowManager
+        return WindowManager.tile_all_windows(ws_id)
+
+    @staticmethod
+    def hypr_toggle_pin(query: Optional[str] = None) -> str:
+        from jarvis_ai.hyprland.window import WindowManager
+        return WindowManager.toggle_pin(query)
+
+    @staticmethod
+    def hypr_toggle_group() -> str:
+        from jarvis_ai.hyprland.window import WindowManager
+        return WindowManager.toggle_group()
+
+    @staticmethod
+    def hypr_cycle_group(direction: str = "f") -> str:
+        from jarvis_ai.hyprland.window import WindowManager
+        return WindowManager.cycle_group(direction)
+
+    @staticmethod
+    def hypr_lock_groups(lock: Optional[bool] = None) -> str:
+        from jarvis_ai.hyprland.window import WindowManager
+        return WindowManager.lock_groups(lock)
+
+    @staticmethod
+    def hypr_save_layout(name: str) -> str:
+        from jarvis_ai.hyprland.workspace import WorkspaceManager
+        return WorkspaceManager.save_layout(name)
+
+    @staticmethod
+    def hypr_restore_layout(name: str) -> str:
+        from jarvis_ai.hyprland.workspace import WorkspaceManager
+        return WorkspaceManager.restore_layout(name)
+
+    @staticmethod
+    def hypr_list_layouts() -> str:
+        from jarvis_ai.hyprland.workspace import WorkspaceManager
+        return WorkspaceManager.list_layouts()
+
+    @staticmethod
+    def hypr_delete_layout(name: str) -> str:
+        from jarvis_ai.hyprland.workspace import WorkspaceManager
+        return WorkspaceManager.delete_layout(name)
+
+    @staticmethod
+    def hypr_cycle_workspaces(direction: str = "next") -> str:
+        from jarvis_ai.hyprland.workspace import WorkspaceManager
+        return WorkspaceManager.cycle_workspaces(direction)
+
+    @staticmethod
+    def hypr_move_to_special(name: str = "special", silent: bool = False) -> str:
+        from jarvis_ai.hyprland.workspace import WorkspaceManager
+        return WorkspaceManager.move_to_special(name, silent=silent)
+
+    @staticmethod
+    def hypr_toggle_special(name: str = "special") -> str:
+        from jarvis_ai.hyprland.workspace import WorkspaceManager
+        return WorkspaceManager.toggle_special(name)
+
+    @staticmethod
+    def hypr_list_monitors() -> str:
+        from jarvis_ai.hyprland.monitor import MonitorManager
+        return MonitorManager.list_monitors_summary()
+
+    @staticmethod
+    def hypr_apply_monitor_profile(profile: str) -> str:
+        from jarvis_ai.hyprland.monitor import MonitorManager
+        return MonitorManager.apply_profile(profile)
+
+    @staticmethod
+    def hypr_screenshot_fullscreen(output_path: Optional[str] = None) -> str:
+        from jarvis_ai.hyprland.peripherals import PeripheralsManager
+        return PeripheralsManager.screenshot_fullscreen(output_path)
+
+    @staticmethod
+    def hypr_screenshot_region(output_path: Optional[str] = None) -> str:
+        from jarvis_ai.hyprland.peripherals import PeripheralsManager
+        return PeripheralsManager.screenshot_region(output_path)
+
+    @staticmethod
+    def hypr_screenshot_window(output_path: Optional[str] = None) -> str:
+        from jarvis_ai.hyprland.peripherals import PeripheralsManager
+        return PeripheralsManager.screenshot_active_window(output_path)
+
+    @staticmethod
+    def hypr_start_recording(audio: bool = False, output_path: Optional[str] = None) -> str:
+        from jarvis_ai.hyprland.peripherals import PeripheralsManager
+        return PeripheralsManager.start_recording(with_audio=audio, output_path=output_path)
+
+    @staticmethod
+    def hypr_stop_recording() -> str:
+        from jarvis_ai.hyprland.peripherals import PeripheralsManager
+        return PeripheralsManager.stop_recording()
+
+    @staticmethod
+    def hypr_clipboard_history(limit: int = 15) -> str:
+        from jarvis_ai.hyprland.peripherals import PeripheralsManager
+        return PeripheralsManager.clipboard_history(limit)
+
+    @staticmethod
+    def hypr_clipboard_search(query: str) -> str:
+        from jarvis_ai.hyprland.peripherals import PeripheralsManager
+        return PeripheralsManager.clipboard_search(query)
+
+    @staticmethod
+    def hypr_clipboard_paste(item_id: str) -> str:
+        from jarvis_ai.hyprland.peripherals import PeripheralsManager
+        return PeripheralsManager.clipboard_paste_item(item_id)
+
+    @staticmethod
+    def hypr_add_window_rule(rule_effect: str, target: str, match_type: str = "title") -> str:
+        from jarvis_ai.hyprland.rules import RulesManager
+        return RulesManager.add_window_rule(rule_effect, target, match_type)
+
+    @staticmethod
+    def hypr_remove_window_rule(match_keyword: str) -> str:
+        from jarvis_ai.hyprland.rules import RulesManager
+        return RulesManager.remove_window_rule(match_keyword)
+
+    # ── Laptop Control Layer ──────────────────────────────────────────────────
+
+    @staticmethod
+    def power_profile(profile: Optional[str] = None) -> str:
+        from jarvis_ai.laptop_control import PowerManager
+        if profile:
+            return PowerManager.set_power_profile(profile)
+        return f"⚡ Current power profile: {PowerManager.get_power_profile()}"
+
+    @staticmethod
+    def wifi_list() -> str:
+        from jarvis_ai.laptop_control import NetworkManager
+        return NetworkManager.list_wifi()
+
+    @staticmethod
+    def wifi_connect(ssid: str, password: Optional[str] = None) -> str:
+        from jarvis_ai.laptop_control import NetworkManager
+        return NetworkManager.connect_wifi(ssid, password)
+
+    @staticmethod
+    def wifi_disconnect() -> str:
+        from jarvis_ai.laptop_control import NetworkManager
+        return NetworkManager.disconnect_wifi()
+
+    @staticmethod
+    def wifi_forget(ssid: str) -> str:
+        from jarvis_ai.laptop_control import NetworkManager
+        return NetworkManager.forget_wifi(ssid)
+
+    @staticmethod
+    def vpn_list() -> str:
+        from jarvis_ai.laptop_control import NetworkManager
+        return NetworkManager.list_vpns()
+
+    @staticmethod
+    def vpn_toggle(name: Optional[str] = None) -> str:
+        from jarvis_ai.laptop_control import NetworkManager
+        return NetworkManager.toggle_vpn(name)
+
+    @staticmethod
+    def network_info() -> str:
+        from jarvis_ai.laptop_control import NetworkManager
+        return NetworkManager.connection_info()
+
+    @staticmethod
+    def process_top(limit: int = 10, sort_by: str = "cpu") -> str:
+        from jarvis_ai.laptop_control import ProcessManager
+        return ProcessManager.list_top_processes(limit, sort_by)
+
+    @staticmethod
+    def process_kill(target: Union[str, int]) -> str:
+        from jarvis_ai.laptop_control import ProcessManager
+        ok, msg = ProcessManager.safe_kill(target)
+        return msg
+
+    @staticmethod
+    def pkg_search(query: str) -> str:
+        from jarvis_ai.laptop_control import PackageManager
+        return PackageManager.search(query)
+
+    @staticmethod
+    def pkg_check_updates() -> str:
+        from jarvis_ai.laptop_control import PackageManager
+        return PackageManager.check_updates()
+
+    @staticmethod
+    def pkg_install(pkg: str) -> str:
+        from jarvis_ai.laptop_control import PackageManager
+        return PackageManager.install(pkg)
+
+    @staticmethod
+    def pkg_update_system() -> str:
+        from jarvis_ai.laptop_control import PackageManager
+        return PackageManager.update_all()
+
+    @staticmethod
+    def input_click(button: int = 1) -> str:
+        from jarvis_ai.laptop_control import InputAutomation
+        ok = InputAutomation.click(button)
+        return "✅ Mouse clicked." if ok else "❌ Failed to click mouse."
+
+    @staticmethod
+    def input_type(text: str) -> str:
+        from jarvis_ai.laptop_control import InputAutomation
+        ok = InputAutomation.type_text(text)
+        return f"✅ Typed '{text}'." if ok else "❌ Failed to type text."
+
+    @staticmethod
+    def file_trash(path: str) -> str:
+        from jarvis_ai.laptop_control import FileManager
+        return FileManager.move_to_trash(path)
+
+    @staticmethod
+    def file_move(src: str, dst: str) -> str:
+        from jarvis_ai.laptop_control import FileManager
+        return FileManager.move_path(src, dst)
+
+    @staticmethod
+    def file_copy(src: str, dst: str) -> str:
+        from jarvis_ai.laptop_control import FileManager
+        return FileManager.copy_path(src, dst)
+
+    @staticmethod
+    def file_rename(src: str, new_name: str) -> str:
+        from jarvis_ai.laptop_control import FileManager
+        return FileManager.rename_path(src, new_name)
+
+    @staticmethod
+    def service_status(unit: str, user_mode: bool = False) -> str:
+        from jarvis_ai.laptop_control import ServiceManager
+        return ServiceManager.status(unit, user_mode)
+
+    @staticmethod
+    def service_manage(unit: str, action: str, user_mode: bool = False) -> str:
+        from jarvis_ai.laptop_control import ServiceManager
+        ok, msg = ServiceManager.manage(unit, action, user_mode)
+        return msg

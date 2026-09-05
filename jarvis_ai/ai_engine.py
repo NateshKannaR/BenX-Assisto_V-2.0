@@ -1044,6 +1044,48 @@ WORKSPACE / WINDOW MANAGEMENT (Hyprland):
 - close_active_window: "close window", "close this", "kill window"
 - toggle_fullscreen: "fullscreen", "toggle fullscreen"
 - toggle_float: "float window", "toggle float"
+- hypr_move_window: "move window left/right/up/down", "move this window right" → direction=left|right|up|down
+- hypr_resize_window: "resize window grow/shrink", "make window larger/smaller/wider" → delta=grow|shrink|wider|narrower
+- hypr_tile_all: "tile all windows", "tile workspace", "unfloat all windows"
+- hypr_toggle_pin: "pin window", "pin this window", "unpin window"
+- hypr_toggle_group: "group windows", "tab windows", "toggle group"
+- hypr_cycle_group: "next tab in group", "previous tab in group", "cycle group" → direction=f|b
+- hypr_save_layout: "save this layout as X", "save layout as work", "save current layout as coding" → name=layout_name
+- hypr_restore_layout: "restore layout X", "restore work layout", "load layout X" → name=layout_name
+- hypr_list_layouts: "list layouts", "show saved layouts", "what layouts do I have"
+- hypr_delete_layout: "delete layout X", "remove layout X" → name=layout_name
+- hypr_cycle_workspaces: "next workspace", "previous workspace", "cycle workspace" → direction=next|prev
+- hypr_move_to_special: "move to special workspace", "send to scratchpad" → name=special_name
+- hypr_toggle_special: "toggle special workspace", "show scratchpad", "toggle scratchpad" → name=special_name
+- hypr_list_monitors: "list monitors", "show screens", "display info", "what monitors are connected"
+- hypr_apply_monitor_profile: "switch to docked layout", "docked profile", "undocked profile", "laptop screen only" → profile=docked|undocked
+- hypr_screenshot_region: "screenshot region", "crop screenshot", "select area screenshot", "snipping tool"
+- hypr_screenshot_window: "screenshot active window", "window screenshot", "capture this window"
+- hypr_start_recording: "record screen", "start screen recording", "start recording" → audio=true|false
+- hypr_stop_recording: "stop recording", "stop screen recording", "finish recording"
+- hypr_clipboard_history: "clipboard history", "show cliphist", "past clips", "recent clipboard" → value=count
+- hypr_clipboard_search: "search clipboard for X", "find in clipboard X" → query=search_term
+- hypr_clipboard_paste: "paste clipboard item X" → value=item_id
+- hypr_add_window_rule: "add window rule float for X", "always float X", "make X float by default" → rule=float on, target=app_name, match_type=class|title
+
+FULL LAPTOP CONTROL:
+- power_profile: "power profile", "set power profile to power-saver/balanced/performance", "battery saver mode", "performance mode" → profile=power-saver|balanced|performance
+- wifi_list: "list wifi", "show wifi networks", "available wifi", "scan wifi"
+- wifi_connect: "connect to wifi SSID", "join wifi SSID" → ssid=network_name, password=optional_password
+- wifi_disconnect: "disconnect wifi", "turn off wifi connection"
+- wifi_forget: "forget wifi SSID", "delete wifi SSID" → ssid=network_name
+- vpn_list: "list vpn", "show vpns"
+- vpn_toggle: "toggle vpn", "connect vpn X", "disconnect vpn X" → name=vpn_name
+- network_info: "network info", "ip address", "connection status", "what is my ip"
+- process_top: "top processes", "what's using the most cpu", "heavy processes", "ram hogs" → sort_by=cpu|memory
+- process_kill: "kill process X", "terminate X", "kill pid 1234" → process=name_or_pid
+- pkg_search: "search package X", "find package X in pacman" → package=name
+- pkg_check_updates: "check updates", "any system updates", "pending packages"
+- pkg_install: "install package X", "pacman install X", "yay install X" → package=name
+- pkg_update_system: "update system", "upgrade all packages", "pacman -Syu"
+- file_trash: "trash file X", "delete file X to trash", "send X to trash" → path=file_path
+- service_status: "service status X", "is service X running", "status of X.service" → service=service_name
+- service_manage: "start service X", "stop service X", "restart service X", "enable service X" → service=service_name, action=start|stop|restart|enable|disable
 
 SELF-AWARENESS RULE:
 - Questions like "which workspace are you on", "where are you running", "in which workspace are you" → {"command":"find_app_workspace","app":"benx"}

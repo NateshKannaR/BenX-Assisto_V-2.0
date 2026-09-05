@@ -85,24 +85,29 @@ class SystemMonitor:
         # CPU
         cpu = psutil.cpu_percent(interval=1)
         if cpu >= thresholds["cpu"]:
+            from jarvis_ai.laptop_control import ProcessManager
+            top_p = ProcessManager.list_top_processes(3, sort_by="cpu")
             self._maybe_alert("high_cpu", f"🔥 CPU at {cpu:.0f}%",
-                              f"CPU usage is critically high ({cpu:.0f}%). "
-                              f"Consider closing heavy processes or running `top` to diagnose.")
+                              f"CPU usage is critically high ({cpu:.0f}%).\n{top_p}")
 
         # RAM
         mem = psutil.virtual_memory()
         if mem.percent >= thresholds["ram"]:
+            from jarvis_ai.laptop_control import ProcessManager
+            top_m = ProcessManager.list_top_processes(3, sort_by="memory")
             self._maybe_alert("high_ram", f"💾 RAM at {mem.percent:.0f}%",
                               f"Memory usage is at {mem.percent:.0f}% "
-                              f"({mem.used/1e9:.1f}GB / {mem.total/1e9:.1f}GB). "
-                              f"Consider closing unused applications.")
+                              f"({mem.used/1e9:.1f}GB / {mem.total/1e9:.1f}GB).\n{top_m}")
 
         # Battery
         battery = psutil.sensors_battery()
         if battery and not battery.power_plugged and battery.percent <= thresholds["battery"]:
+            # Auto-switch to power-saver profile if not already
+            from jarvis_ai.laptop_control import PowerManager
+            PowerManager.set_power_profile("power-saver")
             self._maybe_alert("low_battery", f"🔋 Battery at {battery.percent:.0f}%",
                               f"Battery is critically low ({battery.percent:.0f}%). "
-                              f"Plug in your charger soon. Want me to lower brightness to save power?")
+                              f"Automatically engaged power-saver profile. Please plug in your charger.")
 
         # Temperature
         try:
