@@ -1,0 +1,14 @@
+pymongo[srv]
+numpy
+psutil
+groq
+requests
+pyyaml
+fastapi[standard]
+sse-starlette
+python-multipart
+uvicorn[standard]
+websockets
+qrcode[pil]
+pillow
+pure-python-adb
