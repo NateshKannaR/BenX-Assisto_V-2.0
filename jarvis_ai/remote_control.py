@@ -1,7 +1,7 @@
 """
 BenX Remote Control Server - Bi-directional mobile/laptop control
 FastAPI WebSocket + QR pairing + command relay
-Run: uvicorn jarvis_ai.remote_control:app --port 8000 --host 0.0.0.0
+Run: uvicorn jarvis_ai.remote_control:app --port 8000 --host 127.0.0.1
 """
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Query
 from fastapi.responses import HTMLResponse
@@ -155,5 +155,5 @@ function sendType() {{
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(app, host="127.0.0.1", port=8000)
 

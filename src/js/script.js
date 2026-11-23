@@ -55,11 +55,11 @@ let currentStreamText = ""; // accumulated streamed text
 
 // ── Markdown renderer (lightweight, no deps) ─────────────────
 function renderMarkdown(text) {
-  return text
+  return escHtml(text)
     // Code blocks
     .replace(/```(\w*)\n?([\s\S]*?)```/g, (_, lang, code) => {
       const id = "code-" + Math.random().toString(36).slice(2);
-      return `<pre id="${id}"><button class="copy-code" onclick="copyCode('${id}')">Copy</button><code class="lang-${lang}">${escHtml(code.trim())}</code></pre>`;
+      return `<pre id="${id}"><button class="copy-code" onclick="copyCode('${id}')">Copy</button><code class="lang-${lang}">${code.trim()}</code></pre>`;
     })
     // Inline code
     .replace(/`([^`]+)`/g, "<code>$1</code>")
@@ -234,9 +234,19 @@ function handleServerMessage(msg) {
       }
       break;
 
+    case "confirmation":
+      fetch(`${API_BASE}/api/confirm/${encodeURIComponent(msg.id)}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ approved: window.confirm(msg.text) }),
+      }).then(response => {
+        if (!response.ok) showToast("Confirmation expired.", "error");
+      }).catch(() => showToast("Could not send confirmation.", "error"));
+      break;
+
     case "command_result":
       finaliseStream(msg.text, true);
-      addActivity(`Command executed: ${msg.action}`);
+      addActivity(`Command result: ${msg.action}`);
       break;
 
     case "done":
@@ -407,7 +417,7 @@ async function submitViaSSE(text, model, agentMode) {
       try {
         const msg = JSON.parse(e.data);
         handleServerMessage(msg);
-        if (msg.type === "done" || msg.type === "error" || msg.type === "command_result") {
+        if (msg.type === "done" || msg.type === "error") {
           source.close();
         }
       } catch { /* ignore */ }
@@ -589,7 +599,7 @@ function showToast(message, type = "info", duration = 3500) {
   const toast = document.createElement("div");
   toast.className = `toast ${type}`;
   const icons = { success:"✔", error:"✕", info:"ℹ" };
-  toast.innerHTML = `<span>${icons[type] || "ℹ"}</span> ${message}`;
+  toast.innerHTML = `<span>${icons[type] || "ℹ"}</span> ${escHtml(message)}`;
   ui.toastContainer.appendChild(toast);
   setTimeout(() => {
     toast.style.opacity = "0";
@@ -663,8 +673,8 @@ async function pollSharedMessages() {
         el.className = `chat-message ${role} synced-gtk4`;
         el.innerHTML = `
           <div class="message-meta">
-            <strong>${label} <span style="font-size:0.75em;opacity:0.55">[GTK4]</span></strong>
-            <span class="timestamp">${msg.timestamp || stamp}</span>
+            <strong>${escHtml(label)} <span style="font-size:0.75em;opacity:0.55">[GTK4]</span></strong>
+            <span class="timestamp">${escHtml(msg.timestamp || stamp)}</span>
           </div>
           <div class="message-body">${renderMarkdown(msg.text)}</div>`;
         ui.chatWindow.appendChild(el);

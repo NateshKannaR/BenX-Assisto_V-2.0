@@ -3,20 +3,14 @@
 BenX - Advanced AI Assistant with Beautiful GTK4 UI
 Main entry point
 """
+import argparse
+import importlib.util
+import os
+import shutil
 import sys
 import signal
 import logging
 from datetime import datetime
-from pathlib import Path
-
-# Optional GTK4/Adwaita import
-try:
-    import gi
-    gi.require_version('Gtk', '4.0')
-    gi.require_version('Adw', '1')
-    GTK_IMPORT_OK = True
-except Exception:
-    GTK_IMPORT_OK = False
 
 # Setup logging
 from jarvis_ai.config import Config
@@ -30,14 +24,6 @@ logging.basicConfig(
     ]
 )
 logger = logging.getLogger(__name__)
-
-# Check GTK4 availability
-try:
-    from jarvis_ai.gui import beautiful_gtk4
-    GUI_AVAILABLE = True
-except ImportError as e:
-    GUI_AVAILABLE = False
-    logger.warning(f"Beautiful GTK4 GUI not available: {e}")
 
 # Check system monitor
 try:
@@ -59,9 +45,9 @@ class BenX:
     
     def __init__(self, use_gui: bool = True):
         self.running = True
-        self.use_gui = use_gui and GUI_AVAILABLE
-        self.setup_signal_handlers()
-        self.gui = None
+        self.use_gui = use_gui
+        if not use_gui:
+            self.setup_signal_handlers()
         self._monitor = None
         self._wake_word = None
     
@@ -76,11 +62,6 @@ class BenX:
         self.running = False
         if self._monitor:
             self._monitor.stop()
-        if self.gui and self.gui.root:
-            try:
-                self.gui.root.quit()
-            except:
-                pass
 
     def _start_background_services(self, ai_engine=None):
         """Start background services: system monitor + wake-word."""
@@ -110,52 +91,12 @@ class BenX:
             logger.warning(f"Failed to save command: {e}")
     
     def run(self):
-        """Main application loop"""
-        if "--tui" in sys.argv or "-t" in sys.argv:
-            from benx_tui import BenXTUI
-            BenXTUI().run()
-            return
-
-        if "--gtk" in sys.argv or "--gtk4" in sys.argv:
-            try:
-                from jarvis_ai.gui.beautiful_gtk4 import BeautifulBenXGTK4App
-                app = BeautifulBenXGTK4App(self)
-                app.run_app()
-                return
-            except Exception as e:
-                logger.error(f"GTK4 failed: {e}")
-                print(f"⚠️ GTK4 failed to launch ({e}), launching upgraded TUI...")
-                from benx_tui import BenXTUI
-                BenXTUI().run()
-                return
-
         if self.use_gui:
-            print("🚀 Starting BenX Web UI at http://localhost:8000")
-            print("   Open your browser to http://localhost:8000")
-            try:
-                import subprocess
-                src_main = Path(__file__).parent / 'src' / 'main.py'
-                subprocess.Popen(
-                    [sys.executable, str(src_main)],
-                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
-                )
-                import time
-                time.sleep(1.5)
-                subprocess.Popen(
-                    ['xdg-open', 'http://localhost:8000'],
-                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
-                )
-                # Keep alive
-                while self.running:
-                    time.sleep(1)
-            except Exception as e:
-                logger.error(f"Web UI failed: {e}")
-                print(f"⚠️ Web UI failed ({e}), launching upgraded TUI...")
-                from benx_tui import BenXTUI
-                BenXTUI().run()
+            from jarvis_ai.gui.beautiful_gtk4 import BeautifulBenXGTK4App
+            BeautifulBenXGTK4App(self).run_app()
         else:
             self.run_cli()
-    
+
     def run_cli(self):
         """Run in CLI mode"""
         print("=" * 60)
@@ -215,16 +156,37 @@ class BenX:
 
 
 def main():
-    """Main entry point"""
+    parser = argparse.ArgumentParser(description="BenX desktop assistant")
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument("--tui", "-t", action="store_true", help="launch the terminal UI (default)")
+    mode.add_argument("--gtk", "--gtk4", "--gui", action="store_true", help="launch GTK4")
+    mode.add_argument("--cli", "--no-gui", action="store_true", help="launch the text prompt")
+    mode.add_argument("--web", action="store_true", help="serve the local web UI")
+    mode.add_argument("--doctor", action="store_true", help="check optional dependencies")
+    args = parser.parse_args()
     try:
-        if "--cli" in sys.argv or "--no-gui" in sys.argv and "--tui" not in sys.argv:
-            jarvis = BenX(use_gui=False)
-            jarvis.run()
-        elif "--gui" in sys.argv:
-            jarvis = BenX(use_gui=True)
-            jarvis.run()
+        if args.doctor:
+            from jarvis_ai.hyprland.ipc import HyprlandIPC
+            for command in ("hyprctl", "grim", "slurp", "cliphist", "wl-copy", "ydotool", "nmcli", "tesseract"):
+                print(f"{command}: {'available' if shutil.which(command) else 'missing'}")
+            print(f"Hyprland session: {'reachable' if HyprlandIPC.is_available() else 'unavailable'}")
+            print(f"Textual: {'available' if importlib.util.find_spec('textual') else 'missing'}")
+            try:
+                import gi
+                gi.require_version("Gtk", "4.0")
+                gi.require_version("Adw", "1")
+                from gi.repository import Adw, Gtk
+                print("GTK4 / Libadwaita: available")
+            except (ImportError, ValueError):
+                print("GTK4 / Libadwaita: missing")
+            print(f"AI provider: {'configured' if Config.GROQ_KEY or Config.OPENROUTER_KEY else 'unconfigured'}")
+            print(f"MongoDB: {'configured' if Config.MONGODB_URI else 'local storage'}")
+        elif args.web:
+            import uvicorn
+            uvicorn.run("src.main:app", host="127.0.0.1", port=int(os.getenv("BENX_PORT", "8000")))
+        elif args.gtk or args.cli:
+            BenX(use_gui=args.gtk).run()
         else:
-            # Default to full-featured GTK4-parity TUI
             from benx_tui import BenXTUI
             BenXTUI().run()
     except Exception as e:

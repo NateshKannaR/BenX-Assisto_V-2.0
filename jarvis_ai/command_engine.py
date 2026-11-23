@@ -3,7 +3,7 @@ Command Engine - System command execution
 """
 import os
 import re
-from typing import Optional, List
+from typing import Optional, List, Union
 import shlex
 import logging
 import psutil

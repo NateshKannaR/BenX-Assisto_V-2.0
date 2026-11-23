@@ -4,6 +4,8 @@ Hyprland Workspace Manager - Workspace switching, special scratchpads, and layou
 import json
 import logging
 import os
+import re
+import tempfile
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 from jarvis_ai.hyprland.ipc import HyprlandIPC
@@ -148,9 +150,13 @@ class WorkspaceManager:
         """
         WorkspaceManager._ensure_layouts_dir()
         clean_name = name.strip().lower().replace(" ", "_")
+        if not re.fullmatch(r"[\w-]+", clean_name):
+            return "❌ Use letters, numbers, spaces, underscores or hyphens in layout names."
         target_file = LAYOUTS_DIR / f"{clean_name}.json"
 
-        clients = HyprlandIPC.get_clients()
+        clients = HyprlandIPC.query("clients")
+        if not isinstance(clients, list):
+            return "❌ Could not read windows from Hyprland."
         workspaces = HyprlandIPC.get_workspaces()
         monitors = HyprlandIPC.get_monitors()
 
@@ -177,13 +183,21 @@ class WorkspaceManager:
             ]
         }
 
+        temporary = None
         try:
-            with open(target_file, "w", encoding="utf-8") as f:
+            with tempfile.NamedTemporaryFile(
+                mode="w", encoding="utf-8", dir=LAYOUTS_DIR, delete=False
+            ) as f:
+                temporary = Path(f.name)
                 json.dump(template_data, f, indent=2)
+            temporary.replace(target_file)
             win_count = len(template_data["windows"])
             return f"✅ Saved layout template '{clean_name}' with {win_count} window(s) across {len(workspaces)} workspace(s)."
         except Exception as e:
             return f"❌ Failed to save layout template: {e}"
+        finally:
+            if temporary is not None:
+                temporary.unlink(missing_ok=True)
 
     @staticmethod
     def restore_layout(name: str) -> str:
@@ -193,6 +207,8 @@ class WorkspaceManager:
         """
         WorkspaceManager._ensure_layouts_dir()
         clean_name = name.strip().lower().replace(" ", "_")
+        if not re.fullmatch(r"[\w-]+", clean_name):
+            return "❌ Use letters, numbers, spaces, underscores or hyphens in layout names."
         target_file = LAYOUTS_DIR / f"{clean_name}.json"
 
         if not target_file.exists():
@@ -204,32 +220,51 @@ class WorkspaceManager:
         except Exception as e:
             return f"❌ Failed to load layout template '{clean_name}': {e}"
 
-        saved_windows = template.get("windows", [])
-        current_clients = HyprlandIPC.get_clients()
-        restored = 0
+        if not isinstance(template, dict) or not isinstance(template.get("windows"), list):
+            return "❌ The layout file has an invalid format."
+        current_clients = HyprlandIPC.query("clients")
+        if not isinstance(current_clients, list):
+            return "❌ Could not read windows from Hyprland."
 
-        # Match current windows against saved windows
-        for sw in saved_windows:
-            s_class = (sw.get("class") or "").lower()
-            s_ws = sw.get("workspace")
-            s_float = sw.get("floating", False)
+        available = {client["address"]: client for client in current_clients if client.get("address")}
+        restored, failed = [], []
+        windows = [window for window in template["windows"] if isinstance(window, dict) and window.get("class")]
+        matches = []
+        # Reserve exact title matches before matching remaining windows by class.
+        for exact_title in (True, False):
+            unmatched = []
+            for window in windows:
+                address = next((
+                    address for address, client in available.items()
+                    if str(client.get("class", "")).casefold() == str(window["class"]).casefold()
+                    and (not exact_title or client.get("title") == window.get("title"))
+                ), None)
+                if address is None:
+                    unmatched.append(window)
+                else:
+                    matches.append((window, address, available.pop(address)))
+            windows = unmatched
 
-            # Find matching open client
-            for c in current_clients:
-                c_class = (c.get("class") or "").lower()
-                c_addr = c.get("address", "")
-                if c_class == s_class and c_addr:
-                    # Move to saved workspace
-                    if s_ws is not None:
-                        HyprlandIPC.dispatch("movetoworkspacesilent", f"{s_ws},address:{c_addr}")
-                    # Adjust floating state if mismatched
-                    if c.get("floating") != s_float:
-                        HyprlandIPC.dispatch("focuswindow", f"address:{c_addr}")
-                        HyprlandIPC.dispatch("togglefloating")
-                    restored += 1
-                    break
+        missing = [window.get("title") or window["class"] for window in windows]
+        for window, address, client in matches:
+            label = window.get("title") or window["class"]
+            workspace = window.get("workspace_name") or window.get("workspace")
+            if isinstance(workspace, str) and not re.fullmatch(r"-?\d+|special:[\w-]+", workspace):
+                workspace = f"name:{workspace}"
+            moved = workspace is None or HyprlandIPC.dispatch(
+                "movetoworkspacesilent", f"{workspace},address:{address}"
+            )
+            floating = bool(window.get("floating"))
+            adjusted = bool(client.get("floating")) == floating or HyprlandIPC.dispatch(
+                "setfloating" if floating else "settiled", f"address:{address}"
+            )
+            (restored if moved and adjusted else failed).append(label)
 
-        return f"✅ Restored layout '{clean_name}' ({restored} matching windows positioned)."
+        summary = [f"Layout '{clean_name}': {len(restored)} window(s) restored."]
+        for title, items in (("Restored", restored), ("Missing", missing), ("Failed", failed)):
+            if items:
+                summary.append(f"{title}: {', '.join(map(str, items))}")
+        return "\n".join(summary)
 
     @staticmethod
     def list_layouts() -> str:
@@ -254,6 +289,8 @@ class WorkspaceManager:
     def delete_layout(name: str) -> str:
         """Deletes a saved layout template."""
         clean_name = name.strip().lower().replace(" ", "_")
+        if not re.fullmatch(r"[\w-]+", clean_name):
+            return "❌ Use letters, numbers, spaces, underscores or hyphens in layout names."
         target_file = LAYOUTS_DIR / f"{clean_name}.json"
         if target_file.exists():
             target_file.unlink()

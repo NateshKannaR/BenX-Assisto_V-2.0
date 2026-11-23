@@ -1,60 +1,31 @@
-# BenX Mobile — Flutter App
+# BenX Android companion
 
-Remote control your BenX AI assistant from your phone.
+Pair with your desktop to check its battery, list saved Hyprland layouts, and restore a named layout. Restore waits for approval on the phone.
 
-## Features
-- 💬 Real-time chat via WebSocket
-- 📊 Live system metrics (CPU, RAM, Battery)
-- ⚡ Quick command chips
-- 🤖 Agent mode toggle
-- 📋 Copy responses to clipboard
-- 🌙 Dark cyberpunk UI matching desktop
+## Build and install
 
-## Setup
+Use Flutter 3.24.5, Java 17, and the Android SDK.
 
-### 1. Install Flutter
-```bash
-# Arch
-yay -S flutter
-
-# Ubuntu
-sudo snap install flutter --classic
-```
-
-### 2. Install dependencies
 ```bash
 cd benx_flutter
 flutter pub get
-```
-
-### 3. Run on device/emulator
-```bash
-flutter run
-```
-
-### 4. Build APK
-```bash
+flutter analyze
 flutter build apk --release
-# APK at: build/app/outputs/flutter-apk/app-release.apk
 ```
 
-## Connect to BenX Server
+The APK is written to `build/app/outputs/flutter-apk/app-release.apk`. The GitHub Actions build also uploads it as `benx-companion-apk`. The included Gradle configuration uses a debug signing key for sideloading. Configure your own release signing before distributing it.
 
-1. Make sure BenX web server is running:
-   ```bash
-   bash run_web.sh
-   ```
-2. Open the app → enter your server IP:
-   ```
-   ws://YOUR_PC_IP:8000/ws
-   ```
-   Find your IP: `ip addr | grep 192.168`
+## Pair with the desktop
 
-3. Both phone and PC must be on the **same WiFi network**
+On your desktop, activate the BenX Python environment and generate a pairing token in a private terminal.
 
-## For Vercel deployment
-Use your Vercel URL:
+```bash
+source benx_venv/bin/activate
+export BENX_PAIRING_TOKEN="$(python -c 'import secrets; print(secrets.token_urlsafe(32))')"
+printf '%s\n' "$BENX_PAIRING_TOKEN"
+python -m uvicorn jarvis_ai.companion:app --host 127.0.0.1 --port 8001
 ```
-wss://your-app.vercel.app/ws
-```
-> Note: Vercel has limited WS support — use Railway for full WebSocket
+
+Expose only the companion port through an HTTPS reverse proxy reachable by your phone. Forward WebSocket upgrades at `/ws` to `127.0.0.1:8001` and use a TLS certificate trusted by Android. The desktop web UI stays on its separate loopback port.
+
+Open BenX on your phone, enter `wss://<your-desktop-hostname>/ws`, and paste the token. The app clears the token field after pairing. Generate a new token and restart the companion server to revoke the old token and end existing sessions.

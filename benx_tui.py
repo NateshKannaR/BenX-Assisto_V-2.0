@@ -1030,7 +1030,23 @@ class BenXTUI(App):
                     conversation_context=self.ai_engine.conversation_history,
                     learning_engine=self.ai_engine.learning_engine,
                 )
-                response = CommandExecutor.execute(cmd_json, self.ai_engine, text)
+                def confirm(prompt: str) -> bool:
+                    completed = threading.Event()
+                    approved = False
+
+                    def on_result(result: bool):
+                        nonlocal approved
+                        approved = result
+                        completed.set()
+
+                    self.app.call_from_thread(
+                        self.push_screen, TUIConfirmModal("Confirm action", prompt), on_result
+                    )
+                    return completed.wait(timeout=60) and approved
+
+                response = CommandExecutor.execute(
+                    cmd_json, self.ai_engine, text, confirm_cb=confirm
+                )
                 if response is None:
                     response = self.ai_engine.chat(text)
 

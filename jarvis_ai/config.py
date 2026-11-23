@@ -9,7 +9,7 @@ class Config:
     """Configuration class for BenX"""
     
     # MongoDB Atlas for cross-platform sync (GTK4/Web/Mobile)
-    MONGODB_URI = os.getenv("MONGODB_URI", "mongodb+srv://Natesh:Natesh@cluster0.wwp3oig.mongodb.net/?retryWrites=true&w=majority")
+    MONGODB_URI = os.getenv("MONGODB_URI", "").strip()
     DATABASE_NAME = "benx"
     
     # Auto-load .env file if present

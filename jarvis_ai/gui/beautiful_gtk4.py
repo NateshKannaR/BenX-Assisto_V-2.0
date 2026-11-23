@@ -2890,22 +2890,18 @@ class BeautifulBenXGTK4App:
         self.window = None
 
     def run_app(self):
-        loop = GLib.MainLoop()
+        application = Adw.Application(
+            application_id="com.benx.beautiful",
+            flags=Gio.ApplicationFlags.NON_UNIQUE,
+        )
 
-        def _start():
-            self.window = BeautifulBenXGTK4(
-                self.jarvis,
-                application=Adw.Application(
-                    application_id='com.benx.beautiful',
-                    flags=Gio.ApplicationFlags.NON_UNIQUE
-                )
-            )
+        def activate(app):
+            if app.get_active_window() is None:
+                self.window = BeautifulBenXGTK4(self.jarvis, application=app)
             self.window.present()
-            self.window.connect('destroy', lambda w: loop.quit())
-            return False  # don't repeat
 
-        GLib.idle_add(_start)
-        loop.run()
+        application.connect("activate", activate)
+        return application.run([])
 
 
 def create_beautiful_gtk4_ui(jarvis_instance):

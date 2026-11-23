@@ -4,49 +4,34 @@ on:
   push:
     paths:
       - 'benx_flutter/**'
+      - '.github/workflows/build_apk.yml'
+  pull_request:
+    paths:
+      - 'benx_flutter/**'
+      - '.github/workflows/build_apk.yml'
   workflow_dispatch:
-
-env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: benx_flutter
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-java@v4
         with:
           distribution: 'zulu'
           java-version: '17'
-
       - uses: subosito/flutter-action@v2
         with:
           flutter-version: '3.24.5'
           channel: 'stable'
           cache: true
-
-      - name: Scaffold fresh Android project then overlay our code
-        run: |
-          # Create a clean Flutter project with proper Android v2 embedding
-          flutter create --org com.benx --project-name benx_mobile /tmp/benx_scaffold
-          
-          # Replace lib/main.dart with our app
-          cp benx_flutter/lib/main.dart /tmp/benx_scaffold/lib/main.dart
-          
-          # Replace pubspec.yaml with our dependencies
-          cp benx_flutter/pubspec.yaml /tmp/benx_scaffold/pubspec.yaml
-
-      - name: Get dependencies
-        working-directory: /tmp/benx_scaffold
-        run: flutter pub get
-
-      - name: Build APK
-        working-directory: /tmp/benx_scaffold
-        run: flutter build apk --release
-
-      - name: Upload APK
-        uses: actions/upload-artifact@v4
+      - run: flutter pub get
+      - run: flutter analyze
+      - run: flutter build apk --release
+      - uses: actions/upload-artifact@v4
         with:
-          name: benx-release-apk
-          path: /tmp/benx_scaffold/build/app/outputs/flutter-apk/app-release.apk
+          name: benx-companion-apk
+          path: benx_flutter/build/app/outputs/flutter-apk/app-release.apk

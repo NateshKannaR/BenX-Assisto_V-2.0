@@ -11,6 +11,8 @@ _fallback: list = []  # used only if MongoDB is down
 
 def _col():
     """Return MongoDB collection, or None if unavailable."""
+    if not Config.MONGODB_URI:
+        return None
     try:
         from pymongo import MongoClient
         client = MongoClient(Config.MONGODB_URI, serverSelectionTimeoutMS=3000)

@@ -9,6 +9,9 @@ import json
 import logging
 import asyncio
 import time
+import secrets
+from concurrent.futures import TimeoutError as ConfirmationTimeout
+from contextlib import aclosing
 from pathlib import Path
 from typing import Optional, AsyncGenerator
 from datetime import datetime
@@ -16,10 +19,11 @@ from datetime import datetime
 # Add parent dir to path so jarvis_ai is importable
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, UploadFile, File, Form
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, UploadFile, File, Form, Request, HTTPException
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import HTMLResponse, StreamingResponse, FileResponse
-from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import HTMLResponse, StreamingResponse, FileResponse, JSONResponse
+from starlette.middleware.trustedhost import TrustedHostMiddleware
+from pydantic import BaseModel
 from sse_starlette.sse import EventSourceResponse
 import psutil
 
@@ -57,13 +61,89 @@ def get_executor():
 # ── FastAPI app ───────────────────────────────────────────────────────────────
 app = FastAPI(title="BenX API", version="2.0.0")
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+app.add_middleware(TrustedHostMiddleware, allowed_hosts=["localhost", "127.0.0.1"])
+
+@app.middleware("http")
+async def require_local_browser(request: Request, call_next):
+    origin = request.headers.get("origin")
+    expected_origin = f"{request.url.scheme}://{request.headers.get('host', '')}"
+    if (origin is not None and origin != expected_origin) or (
+        request.headers.get("sec-fetch-site") in {"cross-site", "same-site"}
+    ):
+        return JSONResponse({"detail": "Open BenX directly in your browser."}, status_code=403)
+    return await call_next(request)
+
+
+_pending_confirmations: dict[str, asyncio.Future] = {}
+
+
+class Confirmation(BaseModel):
+    approved: bool
+
+
+@app.post("/api/confirm/{request_id}", status_code=204)
+async def confirm_command(request_id: str, decision: Confirmation):
+    pending = _pending_confirmations.pop(request_id, None)
+    if pending is None or pending.done():
+        raise HTTPException(status_code=404, detail="Confirmation request expired")
+    pending.set_result(decision.approved)
+
+
+async def _execute_with_confirmation(executor, command, ai, user_input, interactive):
+    loop = asyncio.get_running_loop()
+    prompts = asyncio.Queue()
+    request_ids = set()
+
+    async def ask(prompt):
+        request_id = secrets.token_urlsafe(24)
+        decision = loop.create_future()
+        request_ids.add(request_id)
+        _pending_confirmations[request_id] = decision
+        await prompts.put({"type": "confirmation", "id": request_id, "text": prompt})
+        try:
+            return await asyncio.wait_for(decision, timeout=60)
+        except asyncio.TimeoutError:
+            return False
+        finally:
+            request_ids.discard(request_id)
+            _pending_confirmations.pop(request_id, None)
+
+    active = True
+    rejected = False
+
+    def confirm(prompt):
+        nonlocal rejected
+        if not interactive or not active:
+            rejected = True
+            return False
+        future = asyncio.run_coroutine_threadsafe(ask(prompt), loop)
+        try:
+            return future.result(timeout=65)
+        except ConfirmationTimeout:
+            future.cancel()
+            return False
+
+    task = loop.run_in_executor(None, executor.execute, command, ai, user_input, confirm)
+    prompt_task = None
+    try:
+        while not task.done():
+            prompt_task = asyncio.create_task(prompts.get())
+            done, _ = await asyncio.wait({task, prompt_task}, return_when=asyncio.FIRST_COMPLETED)
+            if prompt_task in done and task not in done:
+                yield prompt_task.result()
+        result = task.result()
+        if rejected:
+            result = "This action requires confirmation. Use the live BenX web UI or desktop app."
+        yield {"type": "command_result", "action": json.loads(command)["command"], "text": result}
+    finally:
+        active = False
+        if prompt_task is not None:
+            prompt_task.cancel()
+        for request_id in tuple(request_ids):
+            pending = _pending_confirmations.pop(request_id, None)
+            if pending is not None and not pending.done():
+                pending.set_result(False)
+
 
 # Serve static files
 _src_dir = Path(__file__).parent
@@ -257,7 +337,7 @@ async def mobile_automate(instruction: str):
         return {"error": str(e)}
 
 
-async def _stream_chat_response(user_input: str, model: Optional[str], agent_mode: bool) -> AsyncGenerator[str, None]:
+async def _stream_chat_response(user_input: str, model: Optional[str], agent_mode: bool, *, interactive: bool = False) -> AsyncGenerator[str, None]:
     """Core streaming generator used by both SSE and WebSocket paths."""
     ai = get_ai_engine()
     executor = get_executor()
@@ -283,14 +363,15 @@ async def _stream_chat_response(user_input: str, model: Optional[str], agent_mod
     if action != "none":
         yield json.dumps({"type": "status", "text": f"⚡ Executing: {action}"}) + "\n"
         try:
-            result = await asyncio.get_event_loop().run_in_executor(
-                None,
-                lambda: executor.execute(cmd_json, ai, user_input)
-            )
-            if result is not None:
-                yield json.dumps({"type": "command_result", "action": action, "text": result}) + "\n"
-                yield json.dumps({"type": "done"}) + "\n"
-                return
+            async with aclosing(
+                _execute_with_confirmation(executor, cmd_json, ai, user_input, interactive)
+            ) as events:
+                async for event in events:
+                    if event["text"] is not None:
+                        yield json.dumps(event) + "\n"
+                        if event["type"] == "command_result":
+                            yield json.dumps({"type": "done"}) + "\n"
+                            return
         except Exception as e:
             yield json.dumps({"type": "error", "text": f"Command error: {e}"}) + "\n"
 
@@ -350,8 +431,11 @@ async def chat_stream(
 ):
     """Server-Sent Events streaming chat endpoint."""
     async def event_generator():
-        async for line in _stream_chat_response(message, model, agent_mode):
-            yield {"data": line}
+        async with aclosing(
+            _stream_chat_response(message, model, agent_mode, interactive=True)
+        ) as events:
+            async for line in events:
+                yield {"data": line}
 
     return EventSourceResponse(event_generator())
 
@@ -429,6 +513,11 @@ async def analyze_screenshot(image: UploadFile = File(...)):
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
     """WebSocket for real-time bidirectional communication."""
+    origin = websocket.headers.get("origin")
+    expected_origin = f"http://{websocket.headers['host']}"
+    if origin != expected_origin:
+        await websocket.close(code=1008)
+        return
     await manager.connect(websocket)
     try:
         while True:
@@ -448,12 +537,11 @@ async def websocket_endpoint(websocket: WebSocket):
                 memory_engine = get_memory_engine()
                 memory_engine.remember(user_input, "Web chat processed", "web_chat", device_id)
 
-                async for line in _stream_chat_response(user_input, model, agent_mode):
-                    try:
-                        obj = json.loads(line.strip())
-                        await websocket.send_json(obj)
-                    except Exception:
-                        pass
+                async with aclosing(
+                    _stream_chat_response(user_input, model, agent_mode, interactive=True)
+                ) as events:
+                    async for line in events:
+                        await websocket.send_json(json.loads(line))
 
             elif msg_type == "metrics":
                 metrics = await get_metrics()
@@ -474,4 +562,4 @@ if __name__ == "__main__":
     import uvicorn
     port = int(os.getenv("BENX_PORT", "8000"))
     print(f"🚀 BenX Web Server starting at http://localhost:{port}")
-    uvicorn.run("main:app", host="0.0.0.0", port=port, reload=False, log_level="info")
+    uvicorn.run("main:app", host="127.0.0.1", port=port, reload=False, log_level="info")

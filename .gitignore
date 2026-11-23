@@ -2,3 +2,6 @@ __pycache__/
 *.pyc
 .tmp_robot_ui/
 .env
+
+benx_venv/
+.venv/

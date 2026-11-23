@@ -76,7 +76,7 @@ class CommandExecutor:
             try:
                 return bool(confirm_cb(prompt))
             except Exception:
-                pass
+                return False
         try:
             answer = input(f"{prompt} [y/N]: ").strip().lower()
             return answer in {"y", "yes"}
@@ -134,8 +134,9 @@ class CommandExecutor:
             # Parse command first
             obj = json.loads(cmd_json)
             action = obj.get("command", "none")
-            # Check if this is a project task
-            if ai_engine:
+            # Explicit local layout commands take precedence over inferred commands.
+            layout_action = action in {"hypr_save_layout", "hypr_restore_layout"}
+            if ai_engine and not layout_action:
                 # Initialize orchestrator if not exists
                 if not hasattr(ai_engine, 'project_orchestrator'):
                     ai_engine.project_orchestrator = ProjectOrchestrator(ai_engine)
@@ -149,7 +150,7 @@ class CommandExecutor:
                     return result
             
             # Apply learned patterns
-            if ai_engine and ai_engine.learning_engine:
+            if ai_engine and ai_engine.learning_engine and not layout_action:
                 learned_cmd = ai_engine.learning_engine.apply_learned_pattern(user_input)
                 if learned_cmd:
                     logger.info(f"Using learned pattern for: {user_input}")

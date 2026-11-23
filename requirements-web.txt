@@ -1,4 +1,5 @@
-pymongo[srv]
+pymongo
+dnspython
 faiss-cpu
 numpy
 psutil

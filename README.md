@@ -50,28 +50,42 @@ All destructive operations are strictly gated by confirmation checks in `jarvis_
 
 ## 🚀 Quick Start
 
-### 1. Requirements
-- **Arch Linux + Hyprland** (Wayland)
-- Python 3.10+
-- GTK4 & Libadwaita (`sudo pacman -S gtk4 libadwaita`)
-- Wayland tools: `grim`, `slurp`, `cliphist`, `wl-clipboard`, `ydotool`, `networkmanager`
+Use Python 3.10+ on Arch Linux with a running Hyprland session for desktop actions.
 
-### 2. Run BenX
 ```bash
-# Main GTK4 / Libadwaita Application
-python3 benx.py
-
-# Terminal UI Mode
-python3 benx_tui.py
-
-# Headless / CLI Mode
-python3 benx.py --no-gui
+./setup_and_run.sh
 ```
 
-### 3. Run Automated Tests
+This installs Python dependencies in `benx_venv` and opens the terminal UI. For other modes, activate the environment first.
+
 ```bash
-python3 test_benx.py
+source benx_venv/bin/activate
+python benx.py --doctor        # Check available tools and optional features
+python benx.py --cli          # Plain text prompt
+python benx.py --gtk          # GTK4 / Libadwaita
+python benx.py --web          # Local browser UI at http://127.0.0.1:8000
 ```
+
+- For GTK on Arch, install `gtk4 libadwaita python-gobject python-cairo` with Pacman. To use those Python bindings from the virtual environment, create it with the system Python and `python3 -m venv --system-site-packages benx_venv` before running the setup script. Recreate an existing isolated environment with that option if it cannot import `gi`.
+- Install the utilities for the actions you use. Common examples include `grim`, `slurp`, `cliphist`, `wl-clipboard`, `ydotool`, `networkmanager`, and `tesseract`.
+- Export `GROQ_API_KEY` or `OPENROUTER_API_KEY` for provider-backed chat. Layout save and restore work without a model key.
+- Export `MONGODB_URI` before launch to opt into MongoDB storage. BenX uses local storage by default.
+
+### Try a workspace layout
+
+1. Open two apps and place them on different workspaces.
+2. Enter `save my work layout` in the assistant.
+3. Move one window, then enter `restore my work layout`. BenX returns matching open windows to their recorded workspaces and reports any missing windows.
+
+The browser UI binds to loopback and prompts in the browser before executing protected actions. For authenticated phone access, see the [Android companion setup](benx_flutter/README.md).
+
+### Run tests
+
+```bash
+python -m unittest -v test_benx test_web
+```
+
+GTK import tests run when the GTK bindings are installed. The headless tests mock Hyprland and privileged actions.
 
 ---
 

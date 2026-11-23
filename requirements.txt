@@ -1,4 +1,6 @@
-pymongo[srv]
+pymongo
+dnspython
+textual
 numpy
 psutil
 groq

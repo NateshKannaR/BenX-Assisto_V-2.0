@@ -10,6 +10,7 @@ Comprehensive test suite for BenX AI Assistant:
 import sys
 import os
 import json
+import tempfile
 import unittest
 from unittest.mock import patch, MagicMock
 from pathlib import Path
@@ -132,25 +133,37 @@ class TestHyprlandAutomation(unittest.TestCase):
         self.assertIn("Cycled to next workspace", res_cy)
         mock_dispatch.assert_any_call("workspace", "m+1")
 
-    @patch("jarvis_ai.hyprland.ipc.HyprlandIPC.get_clients")
-    @patch("jarvis_ai.hyprland.ipc.HyprlandIPC.get_workspaces")
-    @patch("jarvis_ai.hyprland.ipc.HyprlandIPC.get_monitors")
-    def test_layout_save_restore(self, mock_mon, mock_ws, mock_clients):
-        mock_mon.return_value = [{"id": 0, "name": "eDP-1"}]
-        mock_ws.return_value = [{"id": 1, "name": "1", "monitor": "eDP-1"}]
-        mock_clients.return_value = [
-            {"address": "0x1234", "class": "kitty", "title": "term", "workspace": {"id": 1, "name": "1"}, "floating": False, "size": [800, 600], "at": [100, 100], "fullscreen": False}
+    @patch.object(HyprlandIPC, "dispatch", return_value=True)
+    @patch.object(HyprlandIPC, "query")
+    def test_layout_save_restore(self, query, dispatch):
+        clients = [
+            {"address": "0x1", "class": "kitty", "title": "term", "workspace": {"id": 1, "name": "1"}},
+            {"address": "0x2", "class": "kitty", "title": "logs", "workspace": {"id": 2, "name": "2"}},
+            {"address": "0x3", "class": "firefox", "title": "docs", "workspace": {"id": 1, "name": "1"}},
         ]
-        wsm = WorkspaceManager()
-        res = wsm.save_layout("test_test_layout")
-        self.assertIn("Saved layout template", res)
+        query.side_effect = lambda command: clients if command == "clients" else []
+        with tempfile.TemporaryDirectory() as directory, patch(
+            "jarvis_ai.hyprland.workspace.LAYOUTS_DIR", Path(directory)
+        ):
+            self.assertIn("Saved layout template", WorkspaceManager.save_layout("work"))
+            self.assertIn("work", WorkspaceManager.list_layouts())
+            clients = list(reversed(clients[:2]))
+            result = WorkspaceManager.restore_layout("work")
+            self.assertIn("2 window(s) restored", result)
+            self.assertIn("Missing: docs", result)
+            dispatch.assert_any_call("movetoworkspacesilent", "1,address:0x1")
+            dispatch.assert_any_call("movetoworkspacesilent", "2,address:0x2")
+            self.assertIn("Deleted layout", WorkspaceManager.delete_layout("work"))
 
-        layouts = wsm.list_layouts()
-        self.assertIn("test_test_layout", layouts)
-
-        # Cleanup
-        del_res = wsm.delete_layout("test_test_layout")
-        self.assertIn("Deleted layout", del_res)
+    def test_layout_language_without_provider(self):
+        self.assertEqual(
+            json.loads(AIEngine.interpret_command("Save my work layout.")),
+            {"command": "hypr_save_layout", "name": "work"},
+        )
+        self.assertEqual(
+            json.loads(AIEngine.interpret_command("Restore my work layout")),
+            {"command": "hypr_restore_layout", "name": "work"},
+        )
 
     @patch("jarvis_ai.hyprland.ipc.HyprlandIPC.get_monitors")
     def test_monitor_manager(self, mock_mon):
@@ -252,12 +265,22 @@ class TestUIComponents(unittest.TestCase):
         self.assertGreater(svg_icon.stat().st_size, 100)
         self.assertGreater(symbolic_icon.stat().st_size, 100)
 
+    def require_gtk(self):
+        try:
+            import gi
+            gi.require_version("Gtk", "4.0")
+            gi.require_version("Adw", "1")
+        except (ImportError, ValueError):
+            self.skipTest("GTK4 / Libadwaita bindings unavailable")
+
     def test_settings_window_import(self):
+        self.require_gtk()
         import importlib
         mod = importlib.import_module("jarvis_ai.gui.settings_window")
         self.assertTrue(hasattr(mod, "BenXSettingsWindow"))
 
     def test_waveform_widget_import(self):
+        self.require_gtk()
         import importlib
         mod = importlib.import_module("jarvis_ai.gui.waveform_widget")
         self.assertTrue(hasattr(mod, "VoiceWaveformWidget"))

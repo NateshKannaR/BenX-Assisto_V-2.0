@@ -878,6 +878,16 @@ Structure response:
     def interpret_command(text: str, conversation_context: List[Dict] = None, learning_engine=None, model: Optional[str] = None) -> str:
         """Convert natural language to JSON command"""
         from jarvis_ai.learning import LearningEngine
+
+        layout = re.fullmatch(
+            r"(save|restore|load)\s+(?:my\s+)?(?:"
+            r"(?:(?:this|current)\s+)?layout\s+(?:as\s+)?([\w -]+)"
+            r"|([\w -]+)\s+layout)[.!]?",
+            text.strip(), re.IGNORECASE,
+        )
+        if layout:
+            action = "hypr_save_layout" if layout[1].lower() == "save" else "hypr_restore_layout"
+            return json.dumps({"command": action, "name": (layout[2] or layout[3]).strip()})
         
         # Check learned patterns first
         if learning_engine:

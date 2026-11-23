@@ -27,15 +27,18 @@ class MemoryEngine:
         # MongoDB client for cross-platform sync
         self.mongo_client = None
         self.db = None
-        if MONGO_AVAILABLE:
+        if MONGO_AVAILABLE and Config.MONGODB_URI:
             try:
                 self.mongo_client = MongoClient(Config.MONGODB_URI, serverSelectionTimeoutMS=3000)
                 self.db = self.mongo_client[Config.DATABASE_NAME]
                 self.mongo_client.admin.command("ping")  # Test connection
                 logger.info("✅ MongoDB Atlas connected")
             except Exception as e:
+                if self.mongo_client is not None:
+                    self.mongo_client.close()
+                self.mongo_client = None
                 self.db = None
-                logger.warning(f"MongoDB connect failed: {e}")
+                logger.warning("MongoDB connection failed (%s); using local memory", type(e).__name__)
         
         self.short_term = []
         self.long_term = defaultdict(list)
