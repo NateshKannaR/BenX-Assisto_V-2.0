@@ -1,27 +1,11 @@
 # BenX Quick Start Guide
 
-## Running BenX
+See the [current setup and launch instructions](README.md#-quick-start) for the supported modes and Python dependencies.
 
-### Start BenX with GTK4 UI
 ```bash
-cd ~/Downloads/Ben
-source venv/bin/activate
-python benx.py
+./setup_and_run.sh --gtk    # GTK4 / Libadwaita
+./setup_and_run.sh --cli    # Plain text prompt
 ```
-
-### Start in CLI Mode (No GUI)
-```bash
-python benx.py --no-gui
-```
-
-## What Was Fixed
-
-**Problem:** `Namespace Gtk is already loaded with version 3.0`
-
-**Solution:** 
-- Changed `benx.py` to use GTK4 instead of tkinter
-- GTK4 is now loaded FIRST before any other imports
-- Removed conflicting imports from `jarvis_ai/gui/__init__.py`
 
 ## Features
 

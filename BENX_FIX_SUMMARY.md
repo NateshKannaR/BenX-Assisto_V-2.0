@@ -76,7 +76,7 @@ python3 test_benx.py
 
 ## Notes
 
-- Your API key is working: `gsk_p8C7tW0F8aZViL3mnc3O...`
+- Configure your Groq API key through the environment.
 - Primary model: `llama-3.3-70b-versatile` (working perfectly)
 - FAISS/numpy warning is normal - RAG still works with text-based search
 
